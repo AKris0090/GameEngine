@@ -11,22 +11,25 @@ class VulkanRenderer {
 private:
 public:
 
-	// Instance variables and extension support
+	// Handles for all variables, made public so they can be accessed by main
 	VkInstance instance;
 	VkSurfaceKHR surface;
 	VkDebugUtilsMessengerEXT debugMessenger;
 
+	// Swap chain handles
 	VkSwapchainKHR swapChain;
 	std::vector<VkImage> SWChainImages;
 	VkFormat SWChainImageFormat;
 	VkExtent2D SWChainExtent;
 	std::vector<VkImageView> SWChainImageViews;
 
+	// Device and queue handles
 	VkPhysicalDevice GPU;
 	VkDevice device;
 	VkQueue graphicsQueue;
 	VkQueue presentQueue;
 
+	// Swap chain support details struct - holds information to create the swapchain
 	struct SWChainSuppDetails {
 		VkSurfaceCapabilitiesKHR capabilities;
 		std::vector<VkSurfaceFormatKHR> formats;
@@ -37,25 +40,38 @@ public:
 		VkExtent2D chooseSwExtent(const VkSurfaceCapabilitiesKHR& capabilities, SDL_Window* window);
 	};
 
+	// If not debugging, enable validation layers
 #ifdef NDEBUG
 	const bool enableValLayers = false;
 #else
 	const bool enableValLayers = true;
 #endif
 	
-
+	// Create the vulkan instance
 	VkInstance createVulkanInstance(SDL_Window* window, const char* appName);
+	// Check if the validation layers requested are supported
 	bool checkValLayerSupport();
+	// Debug messenger methods - create, populate, and destroy the debug messenger
 	void setupDebugMessenger(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger);
 	void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator);
+	// Create the SDL surface using Vulkan
 	void createSurface(SDL_Window* window);
+	// Check if the extensions requested are supported by the physical device - GPU
 	bool checkExtSupport(VkPhysicalDevice physicalDevice);
+	// Get the details for the swap chain using information from the physical device
 	SWChainSuppDetails getDetails(VkPhysicalDevice physicalDevice);
+	// Initialize the swap chain
 	void createSWChain(SDL_Window* window);
+	// While polling through the available physical devices, check each one to see if it is suitable
 	bool isSuitable(VkPhysicalDevice physicalDevice);
+	// Poll through the available physical devices and choose one using isSuitable()
 	void pickPhysicalDevice();
+	// Using the physical device, create the logical device
 	void createLogicalDevice();
+	// With the swap chain, create the image views
 	void createImageViews();
+	// Create the graphics pipeline
+	void createGraphicsPipeline();
 
 
 	// Queue family struct
@@ -72,6 +88,7 @@ public:
 		}
 	};
 
+	// Find the queue families given a physical device, called in isSuitable to find if the queue families support VK_QUEUE_GRAPHICS_BIT
 	QueueFamilyIndices findQueueFamilies(VkPhysicalDevice physicalDevice) {
 		QueueFamilyIndices indices;
 

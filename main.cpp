@@ -59,6 +59,8 @@ void initVulkan(VulkanRenderer vkR) {
     vkR.createSWChain(displayWindow);
 
     vkR.createImageViews();
+
+    vkR.createGraphicsPipeline();
 }
 
 int main(int argc, char** arcgv) {

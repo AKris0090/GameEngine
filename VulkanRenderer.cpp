@@ -16,6 +16,7 @@ const bool enableValLayers = false;
 const bool enableValLayers = true;
 #endif
 
+// Extension and validation arrays
 const std::vector<const char*> extNames{};
 const std::vector<const char*> validationLayers = {
     "VK_LAYER_KHRONOS_validation"
@@ -24,12 +25,20 @@ const std::vector<const char*> deviceExts = {
     "VK_KHR_swapchain"
 };
 
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/*
+DEBUG AND DEBUG MESSENGER METHODS
+*/
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData) {
     std::cerr << "validation layer: " << pCallbackData->pMessage << std::endl;
 
     return VK_FALSE;
 }
 
+// Create the debug messenger using createInfo struct
 VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger) {
     auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
     if (func != nullptr) {
@@ -40,6 +49,7 @@ VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMes
     }
 }
 
+// Fill the debug messenger with information to call back
 void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo) {
     createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
@@ -48,6 +58,7 @@ void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& create
     createInfo.pfnUserCallback = debugCallback;
 }
 
+// Debug messenger creation and population called here
 void VulkanRenderer::setupDebugMessenger(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger) {
     if (enableValLayers) {
 
@@ -63,6 +74,7 @@ void VulkanRenderer::setupDebugMessenger(VkInstance instance, VkDebugUtilsMessen
     }
 }
 
+// After debug messenger is used, destroy
 void VulkanRenderer::DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator) {
     auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
     if (func != nullptr) {
@@ -70,6 +82,13 @@ void VulkanRenderer::DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugU
     }
 }
 
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/*
+VALIDATION LAYER SUPPORT
+*/
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Check if validation layers requested are supported by querying the available layers
 bool VulkanRenderer::checkValLayerSupport() {
     uint32_t numLayers;
     vkEnumerateInstanceLayerProperties(&numLayers, nullptr);
@@ -80,6 +99,7 @@ bool VulkanRenderer::checkValLayerSupport() {
     for (const char* name : validationLayers) {
         bool found = false;
 
+        // Check if layer is found using strcmp
         for (const auto& layerProps : available) {
             if (strcmp(name, layerProps.layerName) == 0) {
                 found = true;
@@ -95,11 +115,18 @@ bool VulkanRenderer::checkValLayerSupport() {
     return true;
 }
 
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/*
+CREATE VULKAN INSTANCE
+*/
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 VkInstance VulkanRenderer::createVulkanInstance(SDL_Window* window, const char* appName) {
     if ((enableValLayers == true) && (checkValLayerSupport() == false)) {
         std::_Xruntime_error("Validation layers were requested, but none were available");
     }
 
+    // Get application information for the create info struct
     VkApplicationInfo aInfo{};
     aInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     aInfo.pApplicationName = appName;
@@ -112,6 +139,7 @@ VkInstance VulkanRenderer::createVulkanInstance(SDL_Window* window, const char* 
     instanceCInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     instanceCInfo.pApplicationInfo = &aInfo;
 
+    // Poll extensions and add to create info struct
     unsigned int extensionCount = 0;
     if (!SDL_Vulkan_GetInstanceExtensions(window, &extensionCount, nullptr)) {
         std::_Xruntime_error("Unable to figure out the number of vulkan extensions!");
@@ -122,14 +150,17 @@ VkInstance VulkanRenderer::createVulkanInstance(SDL_Window* window, const char* 
         std::_Xruntime_error("Unable to figure out the vulkan extension names!");
     }
 
+    // Add the validation layers extension to the extension names array
     if (enableValLayers) {
         extNames.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
     }
 
+    // Fill create info struct with extension count and name information
     instanceCInfo.enabledExtensionCount = extNames.size();
     instanceCInfo.ppEnabledExtensionNames = extNames.data();
 
     VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
+    // If using validation layers, add information to the create info struct
     if (enableValLayers) {
         instanceCInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
         instanceCInfo.ppEnabledLayerNames = validationLayers.data();
@@ -141,6 +172,7 @@ VkInstance VulkanRenderer::createVulkanInstance(SDL_Window* window, const char* 
         instanceCInfo.enabledLayerCount = 0;
     }
 
+    // Create the instance
     if (vkCreateInstance(&instanceCInfo, nullptr, &instance) != VK_SUCCESS) {
         throw std::runtime_error("failed to create instance!");
     }
@@ -148,12 +180,24 @@ VkInstance VulkanRenderer::createVulkanInstance(SDL_Window* window, const char* 
     return instance;
 }
 
-// Creating the surface with SDL2
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/*
+CREATE SDL SURFACE
+*/
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 void VulkanRenderer::createSurface(SDL_Window* window) {
     SDL_Vulkan_CreateSurface(window, instance, &surface);
 }
 
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/*
+CHECKING EXENSION SUPPORT
+*/
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 bool VulkanRenderer::checkExtSupport(VkPhysicalDevice physicalDevice) {
+    // Poll available extensions provided by the physical device and then check if required extensions are among them
     uint32_t numExts;
     vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &numExts, nullptr);
 
@@ -166,9 +210,17 @@ bool VulkanRenderer::checkExtSupport(VkPhysicalDevice physicalDevice) {
         requiredExtensions.erase(extension.extensionName);
     }
 
+    // Return true or false depending on if the required extensions are fulfilled
     return requiredExtensions.empty();
 }
 
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/*
+SWAP CHAIN METHODS
+*/
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// First aspect : image format
 VkSurfaceFormatKHR VulkanRenderer::SWChainSuppDetails::chooseSwSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) {
     for (const auto& availableFormat : availableFormats) {
         // If it has the right color space and format, return it
@@ -181,6 +233,7 @@ VkSurfaceFormatKHR VulkanRenderer::SWChainSuppDetails::chooseSwSurfaceFormat(con
     return availableFormats[0];
 }
 
+// Second aspect : present mode
 VkPresentModeKHR VulkanRenderer::SWChainSuppDetails::chooseSwPresMode(const std::vector<VkPresentModeKHR>& availablePresModes) {
     // Using Mailbox present mode, if possible
     // Can also use: VK_PRESENT_MODE_IMMEDIATE_KHR, VK_PRESENT_MODE_FIF_RELAXED_KHR, or VK_PRESENT_MODE_MAILBOX_KHR
@@ -194,6 +247,7 @@ VkPresentModeKHR VulkanRenderer::SWChainSuppDetails::chooseSwPresMode(const std:
     return VK_PRESENT_MODE_FIFO_KHR;
 }
 
+// Third aspect : image extent
 VkExtent2D VulkanRenderer::SWChainSuppDetails::chooseSwExtent(const VkSurfaceCapabilitiesKHR& capabilities, SDL_Window* window) {
     if (capabilities.currentExtent.width != UINT32_MAX) {
         return capabilities.currentExtent;
@@ -214,6 +268,7 @@ VkExtent2D VulkanRenderer::SWChainSuppDetails::chooseSwExtent(const VkSurfaceCap
     }
 }
 
+// Get details of the capabilities, formats, and presentation modes avialable from the physical device
 VulkanRenderer::SWChainSuppDetails VulkanRenderer::getDetails(VkPhysicalDevice physicalDevice) {
     SWChainSuppDetails details;
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, &details.capabilities);
@@ -309,12 +364,20 @@ void VulkanRenderer::createSWChain(SDL_Window* window) {
     SWChainExtent = extent;
 }
 
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/*
+PHYSICAL DEVICE AND LOGICAL DEVICE SELECTION AND CREATION METHODS
+*/
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 bool VulkanRenderer::isSuitable(VkPhysicalDevice physicalDevice) {
     // If specific feature is needed, then poll for it, otherwise just return true for any suitable Vulkan supported GPU
     QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
 
+    // Make sure the extensions are supported using the method defined above
     bool extsSupported = checkExtSupport(physicalDevice);
 
+    // Make sure the physical device is capable of supporting a swap chain with the right formats and presentation modes
     bool isSWChainAdequate = false;
     if (extsSupported) {
         SWChainSuppDetails SWChainSupp = getDetails(physicalDevice);
@@ -324,6 +387,7 @@ bool VulkanRenderer::isSuitable(VkPhysicalDevice physicalDevice) {
     return (indices.isComplete() && extsSupported && isSWChainAdequate);
 }
 
+// Parse through the list of available physical devices and choose the one that is suitable
 void VulkanRenderer::pickPhysicalDevice() {
     // Enumerate physical devices and store it in a variable, and check if there are none available
     uint32_t numDevices = 0;
@@ -383,6 +447,7 @@ void VulkanRenderer::createLogicalDevice() {
     cInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExts.size());
     cInfo.ppEnabledExtensionNames = deviceExts.data();
 
+    // If validation layers are enabled, then fill create info struct with size and name information
     if (enableValLayers) {
         cInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
         cInfo.ppEnabledLayerNames = validationLayers.data();
@@ -400,29 +465,52 @@ void VulkanRenderer::createLogicalDevice() {
     vkGetDeviceQueue(device, indices.presentFamily.value(), 0, &presentQueue);
 }
 
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/*
+CREATING AND HANDLING IMAGE VIEWS
+*/
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 void VulkanRenderer::createImageViews() {
     SWChainImageViews.resize(SWChainImages.size());
 
     for (size_t i = 0; i < SWChainImages.size(); i++) {
         VkImageViewCreateInfo imageViewCInfo{};
+
+        // Fill the create info struct with basic information regarding the image view
         imageViewCInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         imageViewCInfo.image = SWChainImages[i];
         imageViewCInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
         imageViewCInfo.format = SWChainImageFormat;
+
+        // Components allow for swizzling the color channels, like mapping to monochrome or adding filters
         imageViewCInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
         imageViewCInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
         imageViewCInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
         imageViewCInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+
+        // Subresource Range is the image's intended purpose, and we define which parts of the image we need to access
         imageViewCInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         imageViewCInfo.subresourceRange.baseMipLevel = 0;
         imageViewCInfo.subresourceRange.levelCount = 1;
         imageViewCInfo.subresourceRange.baseArrayLayer = 0;
         imageViewCInfo.subresourceRange.layerCount = 1;
 
+        // Create the image view
         VkResult res = vkCreateImageView(device, &imageViewCInfo, nullptr, &SWChainImageViews[i]);
 
         if (res != VK_SUCCESS) {
             std::_Xruntime_error("Failed to create image views!");
         }
     }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/*
+GRAPHICS PIPELINE
+*/
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void VulkanRenderer::createGraphicsPipeline() {
+
 }
