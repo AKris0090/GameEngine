@@ -549,6 +549,22 @@ void VulkanRenderer::createRenderPass() {
     renderPassCInfo.subpassCount = 1;
     renderPassCInfo.pSubpasses = &subpass;
 
+    VkSubpassDependency dependency{};
+
+    // Specify the indices and the dependent subpass
+    dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+    dependency.dstSubpass = 0;
+
+    // Specify operations to wait on and the stages in which they occur
+    dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependency.srcAccessMask = 0;
+    dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+    // Add this information to the render pass create informatiton
+    renderPassCInfo.dependencyCount = 1;
+    renderPassCInfo.pDependencies = &dependency;
+
     if (vkCreateRenderPass(device, &renderPassCInfo, nullptr, &renderPass) != VK_SUCCESS) {
         std::_Xruntime_error("Failed to create render pass!");
     }
@@ -822,5 +838,98 @@ void VulkanRenderer::createFrameBuffer() {
         if (vkCreateFramebuffer(device, &frameBufferCInfo, nullptr, &SWChainFrameBuffers[i]) != VK_SUCCESS) {
             std::_Xruntime_error("Failed to create a framebuffer for an image view!");
         }
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/*
+CREATING THE COMMAND POOL AND BUFFER
+*/
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void VulkanRenderer::createCommandPool() {
+    QueueFamilyIndices QFIndices = findQueueFamilies(GPU);
+
+    // Creating the command pool create information struct
+    VkCommandPoolCreateInfo commandPoolCInfo{};
+    commandPoolCInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    commandPoolCInfo.queueFamilyIndex = QFIndices.graphicsFamily.value();
+    commandPoolCInfo.flags = 0;
+
+    // Actual creation of the command buffer
+    if (vkCreateCommandPool(device, &commandPoolCInfo, nullptr, &commandPool) != VK_SUCCESS) {
+        std::_Xruntime_error("Failed to create a command pool!");
+    }
+}
+
+void VulkanRenderer::createCommandBuffers() {
+    commandBuffers.resize(SWChainFrameBuffers.size());
+
+    // Information to allocate the frame buffer
+    VkCommandBufferAllocateInfo CBAllocateInfo{};
+    CBAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    CBAllocateInfo.commandPool = commandPool;
+    CBAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    CBAllocateInfo.commandBufferCount = (uint32_t)commandBuffers.size();
+
+    if (vkAllocateCommandBuffers(device, &CBAllocateInfo, commandBuffers.data()) != VK_SUCCESS) {
+        std::_Xruntime_error("Failed to allocate a command buffer!");
+    }
+
+    // Start command buffer recording
+    for (size_t i = 0; i < commandBuffers.size(); i++) {
+        VkCommandBufferBeginInfo CBBeginInfo{};
+        CBBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        CBBeginInfo.flags = 0;
+        CBBeginInfo.pInheritanceInfo = nullptr;
+
+        if (vkBeginCommandBuffer(commandBuffers[i], &CBBeginInfo) != VK_SUCCESS) {
+            std::_Xruntime_error("Failed to start recording with the command buffer!");
+        }
+
+        // Start the render pass
+        VkRenderPassBeginInfo RPBeginInfo{};
+        // Create the render pass
+        RPBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        RPBeginInfo.renderPass = renderPass;
+        RPBeginInfo.framebuffer = SWChainFrameBuffers[i];
+
+        // Define the size of the render area
+        RPBeginInfo.renderArea.offset = { 0, 0 };
+        RPBeginInfo.renderArea.extent = SWChainExtent;
+
+        // Define the clear values to use
+        VkClearValue clearColor = { {{0.0f, 0.0f, 0.0f, 1.0f}} };
+        RPBeginInfo.clearValueCount = 1;
+        RPBeginInfo.pClearValues = &clearColor;
+
+        // Finally, begin the render pass
+        vkCmdBeginRenderPass(commandBuffers[i], &RPBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+        // Bind the graphics pipeline, and instruct it to draw the triangle
+        vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+        vkCmdDraw(commandBuffers[i], 3, 1, 0, 0);
+
+        // After drawing is over, end the render pass
+        vkCmdEndRenderPass(commandBuffers[i]);
+
+        if (vkEndCommandBuffer(commandBuffers[i]) != VK_SUCCESS) {
+            std::runtime_error("Failed to record back the command buffer!");
+        }
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/*
+INITIALIZING THE TWO SEMAPHORES
+*/
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void VulkanRenderer::createSemaphores() {
+    VkSemaphoreCreateInfo semaCInfo{};
+    semaCInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+    if (vkCreateSemaphore(device, &semaCInfo, nullptr, &imageAccquiredSema) != VK_SUCCESS || vkCreateSemaphore(device, &semaCInfo, nullptr, &renderedSema) != VK_SUCCESS) {
+         std::_Xruntime_error("Failed to create one or both of the semaphores!");
     }
 }

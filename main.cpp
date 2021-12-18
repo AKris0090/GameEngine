@@ -7,33 +7,36 @@
 VulkanRenderer vkR;
 SDL_Window* displayWindow;
 
-void cleanup(VulkanRenderer v) {
-    for (auto frameBuffer : v.SWChainFrameBuffers) {
-        vkDestroyFramebuffer(v.device, frameBuffer, nullptr);
+void cleanup() {
+    vkDestroySemaphore(vkR.device, vkR.imageAccquiredSema, nullptr);
+    vkDestroySemaphore(vkR.device, vkR.renderedSema, nullptr);
+
+    for (auto frameBuffer : vkR.SWChainFrameBuffers) {
+        vkDestroyFramebuffer(vkR.device, frameBuffer, nullptr);
     }
 
-    vkDestroyPipeline(v.device, v.graphicsPipeline, nullptr);
-    vkDestroyPipelineLayout(v.device, v.pipeLineLayout, nullptr);
+    vkDestroyPipeline(vkR.device, vkR.graphicsPipeline, nullptr);
+    vkDestroyPipelineLayout(vkR.device, vkR.pipeLineLayout, nullptr);
 
-    vkDestroyPipelineLayout(v.device, v.pipeLineLayout, nullptr);
-    vkDestroyRenderPass(v.device, v.renderPass, nullptr);
+    vkDestroyPipelineLayout(vkR.device, vkR.pipeLineLayout, nullptr);
+    vkDestroyRenderPass(vkR.device, vkR.renderPass, nullptr);
 
-    for (auto imageView : v.SWChainImageViews) {
-        vkDestroyImageView(v.device, imageView, nullptr);
+    for (auto imageView : vkR.SWChainImageViews) {
+        vkDestroyImageView(vkR.device, imageView, nullptr);
     }
 
-    vkDestroySwapchainKHR(v.device, v.swapChain, nullptr);
-    vkDestroyDevice(v.device, nullptr);
+    vkDestroySwapchainKHR(vkR.device, vkR.swapChain, nullptr);
+    vkDestroyDevice(vkR.device, nullptr);
 
-    if (v.enableValLayers) {
-        v.DestroyDebugUtilsMessengerEXT(v.instance, v.debugMessenger, nullptr);
+    if (vkR.enableValLayers) {
+        vkR.DestroyDebugUtilsMessengerEXT(vkR.instance, vkR.debugMessenger, nullptr);
     }
 
-    vkDestroySurfaceKHR(v.instance, v.surface, nullptr);
-    vkDestroyInstance(v.instance, nullptr);
+    vkDestroySurfaceKHR(vkR.instance, vkR.surface, nullptr);
+    vkDestroyInstance(vkR.instance, nullptr);
 }
 
-void executeVulkanSDLLoop(Display d, VulkanRenderer v) {
+void executeVulkanSDLLoop(Display d) {
     bool running = true;
     while (running) {
         SDL_Event event;
@@ -46,14 +49,16 @@ void executeVulkanSDLLoop(Display d, VulkanRenderer v) {
                 break;
             }
         }
+        // Method to draw the frame
+        d.drawNewFrame(vkR);
     }
     // Cleanup after looping before exiting program
-    cleanup(v);
+    cleanup();
     SDL_DestroyWindow(displayWindow);
     SDL_Quit();
 }
 
-void initVulkan(VulkanRenderer vkR) {
+void initVulkan() {
     vkR.instance = vkR.createVulkanInstance(displayWindow, "Vulkan Game Engine");
 
     if (vkR.enableValLayers) {
@@ -75,6 +80,12 @@ void initVulkan(VulkanRenderer vkR) {
     vkR.createGraphicsPipeline();
 
     vkR.createFrameBuffer();
+
+    vkR.createCommandPool();
+
+    vkR.createCommandBuffers();
+
+    vkR.createSemaphores();
 }
 
 int main(int argc, char** arcgv) {
@@ -82,9 +93,9 @@ int main(int argc, char** arcgv) {
     Display d;
     displayWindow = d.initDisplay("Vulkan Game Engine");
 
-    initVulkan(vkR);
+    initVulkan();
 
-    executeVulkanSDLLoop(d, vkR);
+    executeVulkanSDLLoop(d);
 
     return 0;
 }

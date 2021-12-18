@@ -45,6 +45,18 @@ public:
 	// Handle to hold the frame buffers
 	std::vector<VkFramebuffer> SWChainFrameBuffers;
 
+	// Command Buffers - Command pool and command buffer handles
+	VkCommandPool commandPool;
+
+	// Handle for the list of command buffers
+	std::vector<VkCommandBuffer> commandBuffers;
+
+	// Handles for the two semaphores - one for if the image is available and the other to present the image
+	VkSemaphore imageAccquiredSema;
+	VkSemaphore renderedSema;
+
+
+
 	// Swap chain support details struct - holds information to create the swapchain
 	struct SWChainSuppDetails {
 		VkSurfaceCapabilitiesKHR capabilities;
@@ -92,6 +104,12 @@ public:
 	void createGraphicsPipeline();
 	// Creating the all-important frame buffer
 	void createFrameBuffer();
+	// You have to first record all the operations to perform, so we need a command pool
+	void createCommandPool();
+	// Create a list of command buffer objects
+	void createCommandBuffers();
+	// Create the semaphores, signaling objects to allow asynchronous tasks to happen at the same time
+	void createSemaphores();
 
 
 	// Helper methods for the graphics pipeline
