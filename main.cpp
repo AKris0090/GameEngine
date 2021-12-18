@@ -6,10 +6,14 @@
 
 VulkanRenderer vkR;
 SDL_Window* displayWindow;
+const int MAX_FRAMES_IN_FLIGHT = 2;
 
 void cleanup() {
-    vkDestroySemaphore(vkR.device, vkR.imageAccquiredSema, nullptr);
-    vkDestroySemaphore(vkR.device, vkR.renderedSema, nullptr);
+    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        vkDestroySemaphore(vkR.device, vkR.imageAcquiredSema[i], nullptr);
+        vkDestroySemaphore(vkR.device, vkR.renderedSema[i], nullptr);
+        vkDestroyFence(vkR.device, vkR.inFlightFences[i], nullptr);
+    }
 
     for (auto frameBuffer : vkR.SWChainFrameBuffers) {
         vkDestroyFramebuffer(vkR.device, frameBuffer, nullptr);
@@ -50,7 +54,7 @@ void executeVulkanSDLLoop(Display d) {
             }
         }
         // Method to draw the frame
-        d.drawNewFrame(vkR);
+        d.drawNewFrame(vkR, MAX_FRAMES_IN_FLIGHT, vkR.inFlightFences, vkR.imagesInFlight);
     }
     // Cleanup after looping before exiting program
     cleanup();
@@ -85,7 +89,7 @@ void initVulkan() {
 
     vkR.createCommandBuffers();
 
-    vkR.createSemaphores();
+    vkR.createSemaphores(MAX_FRAMES_IN_FLIGHT);
 }
 
 int main(int argc, char** arcgv) {

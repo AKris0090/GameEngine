@@ -52,8 +52,12 @@ public:
 	std::vector<VkCommandBuffer> commandBuffers;
 
 	// Handles for the two semaphores - one for if the image is available and the other to present the image
-	VkSemaphore imageAccquiredSema;
-	VkSemaphore renderedSema;
+	std::vector<VkSemaphore> imageAcquiredSema;
+	std::vector<VkSemaphore> renderedSema;
+
+	// Handle for the in-flight-fence
+	std::vector<VkFence> inFlightFences;
+	std::vector<VkFence> imagesInFlight;
 
 
 
@@ -109,7 +113,7 @@ public:
 	// Create a list of command buffer objects
 	void createCommandBuffers();
 	// Create the semaphores, signaling objects to allow asynchronous tasks to happen at the same time
-	void createSemaphores();
+	void createSemaphores(const int maxFramesInFlight);
 
 
 	// Helper methods for the graphics pipeline

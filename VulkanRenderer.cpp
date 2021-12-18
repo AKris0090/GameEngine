@@ -914,7 +914,7 @@ void VulkanRenderer::createCommandBuffers() {
         vkCmdEndRenderPass(commandBuffers[i]);
 
         if (vkEndCommandBuffer(commandBuffers[i]) != VK_SUCCESS) {
-            std::runtime_error("Failed to record back the command buffer!");
+            std::_Xruntime_error("Failed to record back the command buffer!");
         }
     }
 }
@@ -925,11 +925,22 @@ INITIALIZING THE TWO SEMAPHORES
 */
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void VulkanRenderer::createSemaphores() {
+void VulkanRenderer::createSemaphores(const int maxFramesInFlight) {
+    imageAcquiredSema.resize(maxFramesInFlight);
+    renderedSema.resize(maxFramesInFlight);
+    inFlightFences.resize(maxFramesInFlight);
+    imagesInFlight.resize(SWChainImages.size(), VK_NULL_HANDLE);
+
     VkSemaphoreCreateInfo semaCInfo{};
     semaCInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
-    if (vkCreateSemaphore(device, &semaCInfo, nullptr, &imageAccquiredSema) != VK_SUCCESS || vkCreateSemaphore(device, &semaCInfo, nullptr, &renderedSema) != VK_SUCCESS) {
-         std::_Xruntime_error("Failed to create one or both of the semaphores!");
+    VkFenceCreateInfo fenceCInfo{};
+    fenceCInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    fenceCInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+    for (size_t i = 0; i < maxFramesInFlight; i++) {
+        if (vkCreateSemaphore(device, &semaCInfo, nullptr, &imageAcquiredSema[i]) != VK_SUCCESS || vkCreateSemaphore(device, &semaCInfo, nullptr, &renderedSema[i]) != VK_SUCCESS || vkCreateFence(device, &fenceCInfo, nullptr, &inFlightFences[i]) != VK_SUCCESS) {
+            std::_Xruntime_error("Failed to create the synchronization objects for a frame!");
+        }
     }
 }

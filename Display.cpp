@@ -27,17 +27,28 @@ SDL_Window* Display::initDisplay(const char* appName) {
     return window;
 }
 
-void Display::drawNewFrame(VulkanRenderer v) {
+void Display::drawNewFrame(VulkanRenderer v, int maxFramesInFlight, std::vector<VkFence> inFlightFences, std::vector<VkFence> imagesInFlight) {
+    // Wait for the frame to be finished, with the fences
+    vkWaitForFences(v.device, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
+
     // Acquire an image from the swap chain, execute the command buffer with the image attached in the framebuffer, and return to swap chain as ready to present
     uint32_t imageIndex;
     // Disable the timeout with UINT64_MAX
-    vkAcquireNextImageKHR(v.device, v.swapChain, UINT64_MAX, v.imageAccquiredSema, VK_NULL_HANDLE, &imageIndex);
+    vkAcquireNextImageKHR(v.device, v.swapChain, UINT64_MAX, v.imageAcquiredSema[currentFrame], VK_NULL_HANDLE, &imageIndex);
+
+    // Check to make sure previous frame isnt using the image
+    if (imagesInFlight[imageIndex] != VK_NULL_HANDLE) {
+        vkWaitForFences(v.device, 1, &imagesInFlight[imageIndex], VK_TRUE, UINT64_MAX);
+    }
+
+    // Now mark the new image as being used by the frame
+    imagesInFlight[imageIndex] = inFlightFences[currentFrame];
 
     // Submit the command buffer with the semaphore
     VkSubmitInfo queueSubmitInfo{};
     queueSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
-    VkSemaphore waitSemaphores[] = { v.imageAccquiredSema };
+    VkSemaphore waitSemaphores[] = { v.imageAcquiredSema[currentFrame] };
     VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
     queueSubmitInfo.waitSemaphoreCount = 1;
     queueSubmitInfo.pWaitSemaphores = waitSemaphores;
@@ -48,12 +59,14 @@ void Display::drawNewFrame(VulkanRenderer v) {
     queueSubmitInfo.pCommandBuffers = &v.commandBuffers[imageIndex];
 
     // Specify which semaphores to signal once command buffers have finished execution
-    VkSemaphore signaledSemaphores[] = { v.renderedSema };
+    VkSemaphore signaledSemaphores[] = { v.renderedSema[currentFrame] };
     queueSubmitInfo.signalSemaphoreCount = 1;
     queueSubmitInfo.pSignalSemaphores = signaledSemaphores;
 
+    vkResetFences(v.device, 1, &inFlightFences[currentFrame]);
+
     // Finally, submit the queue info
-    if (vkQueueSubmit(v.graphicsQueue, 1, &queueSubmitInfo, VK_NULL_HANDLE) != VK_SUCCESS) {
+    if (vkQueueSubmit(v.graphicsQueue, 1, &queueSubmitInfo, inFlightFences[currentFrame]) != VK_SUCCESS) {
         std::_Xruntime_error("Failed to submit the draw command buffer to the graphics queue!");
     }
 
@@ -75,4 +88,6 @@ void Display::drawNewFrame(VulkanRenderer v) {
     presentInfo.pResults = nullptr;
 
     vkQueuePresentKHR(v.presentQueue, &presentInfo);
+
+    currentFrame = (currentFrame + 1) % maxFramesInFlight;
 }
