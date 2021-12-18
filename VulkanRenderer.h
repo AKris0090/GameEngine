@@ -36,6 +36,9 @@ public:
 	// Pipeline Layout for "gloabls" to change shaders
 	VkPipelineLayout pipeLineLayout;
 
+	// Render pass handles
+	VkRenderPass renderPass;
+
 	// Swap chain support details struct - holds information to create the swapchain
 	struct SWChainSuppDetails {
 		VkSurfaceCapabilitiesKHR capabilities;
@@ -77,6 +80,8 @@ public:
 	void createLogicalDevice();
 	// With the swap chain, create the image views
 	void createImageViews();
+	// Create the render pass
+	void createRenderPass();
 	// Create the graphics pipeline
 	void createGraphicsPipeline();
 

@@ -9,6 +9,7 @@ SDL_Window* displayWindow;
 
 void cleanup(VulkanRenderer v) {
     vkDestroyPipelineLayout(v.device, v.pipeLineLayout, nullptr);
+    vkDestroyRenderPass(v.device, v.renderPass, nullptr);
 
     for (auto imageView : v.SWChainImageViews) {
         vkDestroyImageView(v.device, imageView, nullptr);
@@ -61,6 +62,8 @@ void initVulkan(VulkanRenderer vkR) {
     vkR.createSWChain(displayWindow);
 
     vkR.createImageViews();
+
+    vkR.createRenderPass();
 
     vkR.createGraphicsPipeline();
 }

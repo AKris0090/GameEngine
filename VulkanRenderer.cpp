@@ -508,6 +508,55 @@ void VulkanRenderer::createImageViews() {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /*
+CREATING THE RENDER PASS
+*/
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void VulkanRenderer::createRenderPass() {
+    VkAttachmentDescription colorAttachment{};
+    colorAttachment.format = SWChainImageFormat;
+    colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+
+    // Determine what to do with the data in the attachment before and after the rendering
+    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+
+    // Apply to stencil data
+    colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+
+    // Specify the layout of pixels in memory for the images
+    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+    // One render pass consists of multiple render subpasses, but we are only going to use 1 for the triangle
+    VkAttachmentReference colorAttachmentReference{};
+    colorAttachmentReference.attachment = 0;
+    colorAttachmentReference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    // Create the subpass
+    VkSubpassDescription subpass{};
+    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    // Have to be explicit about this subpass being a graphics subpass
+    subpass.colorAttachmentCount = 1;
+    subpass.pColorAttachments = &colorAttachmentReference;
+
+    // Create information struct for the render pass
+    VkRenderPassCreateInfo renderPassCInfo{};
+    renderPassCInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    renderPassCInfo.attachmentCount = 1;
+    renderPassCInfo.pAttachments = &colorAttachment;
+    renderPassCInfo.subpassCount = 1;
+    renderPassCInfo.pSubpasses = &subpass;
+
+    if (vkCreateRenderPass(device, &renderPassCInfo, nullptr, &renderPass) != VK_SUCCESS) {
+        std::_Xruntime_error("Failed to create render pass!");
+    }
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/*
 GRAPHICS PIPELINE
 */
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -673,7 +722,7 @@ void VulkanRenderer::createGraphicsPipeline() {
     pipeLineLayoutCInfo.pPushConstantRanges = nullptr; // Optional
 
     if (vkCreatePipelineLayout(device, &pipeLineLayoutCInfo, nullptr, &pipeLineLayout) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create pipeline layout!");
+        std::_Xruntime_error("Failed to create pipeline layout!");
     }
 }
 
@@ -688,7 +737,7 @@ std::vector<char> VulkanRenderer::readFile(const std::string& filename) {
     // Start reading at end of the file and read as binary
     std::ifstream file(filename, std::ios::ate | std::ios::binary);
     if (!file.is_open()) {
-        throw std::runtime_error("failed to open file!");
+        std::_Xruntime_error("Failed to open the specified file!");
     }
 
     // Read the file, create the buffer, and return it
