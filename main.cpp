@@ -8,6 +8,10 @@ VulkanRenderer vkR;
 SDL_Window* displayWindow;
 
 void cleanup(VulkanRenderer v) {
+    for (auto frameBuffer : v.SWChainFrameBuffers) {
+        vkDestroyFramebuffer(v.device, frameBuffer, nullptr);
+    }
+
     vkDestroyPipeline(v.device, v.graphicsPipeline, nullptr);
     vkDestroyPipelineLayout(v.device, v.pipeLineLayout, nullptr);
 
@@ -69,6 +73,8 @@ void initVulkan(VulkanRenderer vkR) {
     vkR.createRenderPass();
 
     vkR.createGraphicsPipeline();
+
+    vkR.createFrameBuffer();
 }
 
 int main(int argc, char** arcgv) {

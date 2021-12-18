@@ -794,3 +794,33 @@ VkShaderModule VulkanRenderer::createShaderModule(const std::vector<char>& binar
 
     return shaderMod;
 }
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/*
+CREATING THE FRAME BUFFER
+*/
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void VulkanRenderer::createFrameBuffer() {
+    SWChainFrameBuffers.resize(SWChainImageViews.size());
+
+    // Iterate through the image views and create framebuffers from them
+    for (size_t i = 0; i < SWChainImageViews.size(); i++) {
+        VkImageView attachments[] = {
+            SWChainImageViews[i]
+        };
+
+        VkFramebufferCreateInfo frameBufferCInfo{};
+        frameBufferCInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        frameBufferCInfo.renderPass = renderPass;
+        frameBufferCInfo.attachmentCount = 1;
+        frameBufferCInfo.pAttachments = attachments;
+        frameBufferCInfo.width = SWChainExtent.width;
+        frameBufferCInfo.height = SWChainExtent.height;
+        frameBufferCInfo.layers = 1;
+
+        if (vkCreateFramebuffer(device, &frameBufferCInfo, nullptr, &SWChainFrameBuffers[i]) != VK_SUCCESS) {
+            std::_Xruntime_error("Failed to create a framebuffer for an image view!");
+        }
+    }
+}

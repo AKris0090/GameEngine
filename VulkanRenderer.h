@@ -42,6 +42,9 @@ public:
 	// The graphics pipeline handle
 	VkPipeline graphicsPipeline;
 
+	// Handle to hold the frame buffers
+	std::vector<VkFramebuffer> SWChainFrameBuffers;
+
 	// Swap chain support details struct - holds information to create the swapchain
 	struct SWChainSuppDetails {
 		VkSurfaceCapabilitiesKHR capabilities;
@@ -87,6 +90,8 @@ public:
 	void createRenderPass();
 	// Create the graphics pipeline
 	void createGraphicsPipeline();
+	// Creating the all-important frame buffer
+	void createFrameBuffer();
 
 
 	// Helper methods for the graphics pipeline
