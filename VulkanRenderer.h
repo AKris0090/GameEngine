@@ -39,6 +39,9 @@ public:
 	// Render pass handles
 	VkRenderPass renderPass;
 
+	// The graphics pipeline handle
+	VkPipeline graphicsPipeline;
+
 	// Swap chain support details struct - holds information to create the swapchain
 	struct SWChainSuppDetails {
 		VkSurfaceCapabilitiesKHR capabilities;

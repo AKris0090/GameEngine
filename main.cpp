@@ -8,6 +8,9 @@ VulkanRenderer vkR;
 SDL_Window* displayWindow;
 
 void cleanup(VulkanRenderer v) {
+    vkDestroyPipeline(v.device, v.graphicsPipeline, nullptr);
+    vkDestroyPipelineLayout(v.device, v.pipeLineLayout, nullptr);
+
     vkDestroyPipelineLayout(v.device, v.pipeLineLayout, nullptr);
     vkDestroyRenderPass(v.device, v.renderPass, nullptr);
 

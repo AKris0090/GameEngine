@@ -586,10 +586,6 @@ void VulkanRenderer::createGraphicsPipeline() {
     // Define array to contain the shader create information structs
     VkPipelineShaderStageCreateInfo stages[] = { vertextStageCInfo, fragmentStageCInfo };
 
-    // After all the processing with the modules is over, destroy them
-    vkDestroyShaderModule(device, vertexShaderModule, nullptr);
-    vkDestroyShaderModule(device, fragmentShaderModule, nullptr);
-
     // Describing the format of the vertex data to be passed to the vertex shader
     VkPipelineVertexInputStateCreateInfo vertexInputCInfo{};
     vertexInputCInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
@@ -716,14 +712,47 @@ void VulkanRenderer::createGraphicsPipeline() {
     // Initialize the pipeline layout with another create info struct
     VkPipelineLayoutCreateInfo pipeLineLayoutCInfo{};
     pipeLineLayoutCInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipeLineLayoutCInfo.setLayoutCount = 0; // Optional
-    pipeLineLayoutCInfo.pSetLayouts = nullptr; // Optional
-    pipeLineLayoutCInfo.pushConstantRangeCount = 0; // Optional
-    pipeLineLayoutCInfo.pPushConstantRanges = nullptr; // Optional
+    pipeLineLayoutCInfo.setLayoutCount = 0;
+    pipeLineLayoutCInfo.pSetLayouts = nullptr;
+    pipeLineLayoutCInfo.pushConstantRangeCount = 0;
+    pipeLineLayoutCInfo.pPushConstantRanges = nullptr;
 
     if (vkCreatePipelineLayout(device, &pipeLineLayoutCInfo, nullptr, &pipeLineLayout) != VK_SUCCESS) {
         std::_Xruntime_error("Failed to create pipeline layout!");
     }
+
+    // Combine the shader stages, fixed-function state, pipeline layout, and render pass to create the graphics pipeline
+    // First - populate struct with the information
+    VkGraphicsPipelineCreateInfo graphicsPipelineCInfo{};
+    graphicsPipelineCInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    graphicsPipelineCInfo.stageCount = 2;
+    graphicsPipelineCInfo.pStages = stages;
+
+    graphicsPipelineCInfo.pVertexInputState = &vertexInputCInfo;
+    graphicsPipelineCInfo.pInputAssemblyState = &inputAssemblyCInfo;
+    graphicsPipelineCInfo.pViewportState = &viewportStateCInfo;
+    graphicsPipelineCInfo.pRasterizationState = &rasterizerCInfo;
+    graphicsPipelineCInfo.pMultisampleState = &multiSamplingCInfo;
+    graphicsPipelineCInfo.pDepthStencilState = nullptr;
+    graphicsPipelineCInfo.pColorBlendState = &colorBlendingCInfo;
+    graphicsPipelineCInfo.pDynamicState = nullptr;
+
+    graphicsPipelineCInfo.layout = pipeLineLayout;
+
+    graphicsPipelineCInfo.renderPass = renderPass;
+    graphicsPipelineCInfo.subpass = 0;
+
+    graphicsPipelineCInfo.basePipelineHandle = VK_NULL_HANDLE;
+    graphicsPipelineCInfo.basePipelineIndex = -1;
+
+    // Create the object
+    if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &graphicsPipelineCInfo, nullptr, &graphicsPipeline) != VK_SUCCESS) {
+        std::_Xruntime_error("Failed to create the graphics pipeline!");
+    }
+
+    // After all the processing with the modules is over, destroy them
+    vkDestroyShaderModule(device, vertexShaderModule, nullptr);
+    vkDestroyShaderModule(device, fragmentShaderModule, nullptr);
 }
 
 
