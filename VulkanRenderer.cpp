@@ -9,6 +9,7 @@
 #include <string>
 #include <algorithm>
 #include <iostream>
+#include <fstream>
 
 #ifdef NDEBUG
 const bool enableValLayers = false;
@@ -512,5 +513,206 @@ GRAPHICS PIPELINE
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void VulkanRenderer::createGraphicsPipeline() {
+    // Read the file for the bytecodfe of the shaders
+    std::vector<char> vertexShader = readFile("shaders/vert.spv");
+    std::vector<char> fragmentShader = readFile("shaders/frag.spv");
 
+    // Wrap the bytecode with VkShaderModule objects
+    VkShaderModule vertexShaderModule = createShaderModule(vertexShader);
+    VkShaderModule fragmentShaderModule = createShaderModule(fragmentShader);
+
+    //Create the shader information struct to begin actuall using the shader
+    VkPipelineShaderStageCreateInfo vertextStageCInfo{};
+    vertextStageCInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    vertextStageCInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+    vertextStageCInfo.module = vertexShaderModule;
+    vertextStageCInfo.pName = "main";
+
+    VkPipelineShaderStageCreateInfo fragmentStageCInfo{};
+    fragmentStageCInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    fragmentStageCInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    fragmentStageCInfo.module = fragmentShaderModule;
+    fragmentStageCInfo.pName = "main";
+
+    // Define array to contain the shader create information structs
+    VkPipelineShaderStageCreateInfo stages[] = { vertextStageCInfo, fragmentStageCInfo };
+
+    // After all the processing with the modules is over, destroy them
+    vkDestroyShaderModule(device, vertexShaderModule, nullptr);
+    vkDestroyShaderModule(device, fragmentShaderModule, nullptr);
+
+    // Describing the format of the vertex data to be passed to the vertex shader
+    VkPipelineVertexInputStateCreateInfo vertexInputCInfo{};
+    vertexInputCInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    vertexInputCInfo.vertexBindingDescriptionCount = 0;
+    vertexInputCInfo.pVertexBindingDescriptions = nullptr;
+    vertexInputCInfo.vertexAttributeDescriptionCount = 0;
+    vertexInputCInfo.pVertexAttributeDescriptions = nullptr;
+
+    // Next struct describes what kind of geometry will be drawn from the verts and if primitive restart should be enabled
+    VkPipelineInputAssemblyStateCreateInfo inputAssemblyCInfo{};
+    inputAssemblyCInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    inputAssemblyCInfo.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    inputAssemblyCInfo.primitiveRestartEnable = false;
+
+    // Initialize the viewport information struct, a lot of the size information will come from the swap chain extent factor
+    VkViewport viewPort{};
+    viewPort.x = 0.0f;
+    viewPort.y = 0.0f;
+    viewPort.width = (float)SWChainExtent.width;
+    viewPort.height = (float)SWChainExtent.height;
+    viewPort.minDepth = 0.0f;
+    viewPort.maxDepth = 1.0f;
+
+    // Create scissor rectangle to cover the entireity of the viewport
+    VkRect2D scissorRect{};
+    scissorRect.offset = { 0, 0 };
+    scissorRect.extent = SWChainExtent;
+
+    // Combine the viewport information struct and the scissor rectangle into a single viewport state
+    VkPipelineViewportStateCreateInfo viewportStateCInfo{};
+    viewportStateCInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    viewportStateCInfo.viewportCount = 1;
+    viewportStateCInfo.pViewports = &viewPort;
+    viewportStateCInfo.scissorCount = 1;
+    viewportStateCInfo.pScissors = &scissorRect;
+
+    // Initialize rasterizer, which takes information from the geometry formed by the vertex shader into fragments to be colored by the fragment shader
+    VkPipelineRasterizationStateCreateInfo rasterizerCInfo{};
+    rasterizerCInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    // Fragments beyond the near and far planes are clamped to those planes, instead of discarding them
+    rasterizerCInfo.depthClampEnable = VK_FALSE;
+    // If set to true, geometry never passes through the rasterization phase, and disables output to framebuffer
+    rasterizerCInfo.rasterizerDiscardEnable = VK_FALSE;
+    // Determines how fragments are generated for geometry, using other modes requires enabling a GPU feature
+    rasterizerCInfo.polygonMode = VK_POLYGON_MODE_FILL;
+
+    // Linewidth describes thickness of lines in terms of number of fragments 
+    rasterizerCInfo.lineWidth = 1.0f;
+    // Specify type of culling and and the vertex order for the faces to be considered
+    rasterizerCInfo.cullMode = VK_CULL_MODE_BACK_BIT;
+    rasterizerCInfo.frontFace = VK_FRONT_FACE_CLOCKWISE;
+
+    // Alter depth values by adding constant or biasing them based on a fragment's slope
+    rasterizerCInfo.depthBiasEnable = VK_FALSE;
+    rasterizerCInfo.depthBiasConstantFactor = 0.0f;
+    rasterizerCInfo.depthBiasClamp = 0.0f;
+    rasterizerCInfo.depthBiasSlopeFactor = 0.0f;
+
+    // Multisampling information struct
+    VkPipelineMultisampleStateCreateInfo multiSamplingCInfo{};
+    multiSamplingCInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    multiSamplingCInfo.sampleShadingEnable = VK_FALSE;
+    multiSamplingCInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+    multiSamplingCInfo.minSampleShading = 1.0f;
+    multiSamplingCInfo.pSampleMask = nullptr;
+    multiSamplingCInfo.alphaToCoverageEnable = VK_FALSE;
+    multiSamplingCInfo.alphaToOneEnable = VK_FALSE;
+
+    // Depth and stencil testing would go here, but not doing this for the triangle
+
+
+    // Color blending - color from fragment shader needs to be combined with color already in the framebuffer
+    // If <blendEnable> is set to false, then the color from the fragment shader is passed through to the framebuffer
+    // Otherwise, combine with a colorWriteMask to determine the channels that are passed through
+    VkPipelineColorBlendAttachmentState colorBlendAttachment{};
+
+    // Array of structures for all of the framebuffers to set blend constants as blend factors
+    VkPipelineColorBlendStateCreateInfo colorBlendingCInfo{};
+
+    if (colorBlendEnable) {
+        colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        colorBlendAttachment.blendEnable = VK_FALSE;
+        colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+        colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+        colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+        colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+        colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+        colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+
+        colorBlendingCInfo.logicOpEnable = VK_FALSE;
+    }
+    else {
+        colorBlendAttachment.blendEnable = VK_TRUE;
+        colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+        colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+        colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+        colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+        colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+
+        colorBlendingCInfo.logicOpEnable = VK_TRUE;
+    }
+    colorBlendingCInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    colorBlendingCInfo.logicOp = VK_LOGIC_OP_COPY;
+    colorBlendingCInfo.attachmentCount = 1;
+    colorBlendingCInfo.pAttachments = &colorBlendAttachment;
+    colorBlendingCInfo.blendConstants[0] = 0.0f;
+    colorBlendingCInfo.blendConstants[1] = 0.0f;
+    colorBlendingCInfo.blendConstants[2] = 0.0f;
+    colorBlendingCInfo.blendConstants[3] = 0.0f;
+
+    // Not much can be changed without completely recreating the rendering pipeline, so we fill in a struct with the information
+    VkDynamicState dynaStates[] = {
+        VK_DYNAMIC_STATE_VIEWPORT,
+        VK_DYNAMIC_STATE_LINE_WIDTH
+    };
+
+    VkPipelineDynamicStateCreateInfo dynamicStateCInfo{};
+    dynamicStateCInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    dynamicStateCInfo.dynamicStateCount = 2;
+    dynamicStateCInfo.pDynamicStates = dynaStates;
+
+    // We can use uniform values to make changes to the shaders without having to create them again, similar to global variables
+    // Initialize the pipeline layout with another create info struct
+    VkPipelineLayoutCreateInfo pipeLineLayoutCInfo{};
+    pipeLineLayoutCInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipeLineLayoutCInfo.setLayoutCount = 0; // Optional
+    pipeLineLayoutCInfo.pSetLayouts = nullptr; // Optional
+    pipeLineLayoutCInfo.pushConstantRangeCount = 0; // Optional
+    pipeLineLayoutCInfo.pPushConstantRanges = nullptr; // Optional
+
+    if (vkCreatePipelineLayout(device, &pipeLineLayoutCInfo, nullptr, &pipeLineLayout) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create pipeline layout!");
+    }
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/*
+HELPER METHODS FOR THE GRAPHICS PIPELINE
+*/
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+std::vector<char> VulkanRenderer::readFile(const std::string& filename) {
+    // Start reading at end of the file and read as binary
+    std::ifstream file(filename, std::ios::ate | std::ios::binary);
+    if (!file.is_open()) {
+        throw std::runtime_error("failed to open file!");
+    }
+
+    // Read the file, create the buffer, and return it
+    size_t fileSize = file.tellg();
+    std::vector<char> buffer((size_t)file.tellg());
+    file.seekg(0);
+    file.read(buffer.data(), fileSize);
+    file.close();
+
+    return buffer;
+}
+
+// In order to pass the binary code to the graphics pipeline, we need to create a VkShaderModule object to wrap it with
+VkShaderModule VulkanRenderer::createShaderModule(const std::vector<char>& binary) {
+    // We need to specify a pointer to the buffer with the bytecode and the length of the bytecode. Bytecode pointer is a uint32_t pointer
+    VkShaderModuleCreateInfo shaderModuleCInfo{};
+    shaderModuleCInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    shaderModuleCInfo.codeSize = binary.size();
+    shaderModuleCInfo.pCode = reinterpret_cast<const uint32_t*>(binary.data());
+
+    VkShaderModule shaderMod;
+    if (vkCreateShaderModule(device, &shaderModuleCInfo, nullptr, &shaderMod)) {
+        std::_Xruntime_error("Failed to create a shader module!");
+    }
+
+    return shaderMod;
 }

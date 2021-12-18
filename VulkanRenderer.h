@@ -5,6 +5,7 @@
 #include <optional>
 #include <vector>
 #include <cstdio>
+#include <string>
 
 class VulkanRenderer {
 
@@ -28,6 +29,12 @@ public:
 	VkDevice device;
 	VkQueue graphicsQueue;
 	VkQueue presentQueue;
+
+	// Color Blending
+	bool colorBlendEnable = true;
+
+	// Pipeline Layout for "gloabls" to change shaders
+	VkPipelineLayout pipeLineLayout;
 
 	// Swap chain support details struct - holds information to create the swapchain
 	struct SWChainSuppDetails {
@@ -72,6 +79,11 @@ public:
 	void createImageViews();
 	// Create the graphics pipeline
 	void createGraphicsPipeline();
+
+
+	// Helper methods for the graphics pipeline
+	static std::vector<char> readFile(const std::string& fileName);
+	VkShaderModule createShaderModule(const std::vector<char>& binary);
 
 
 	// Queue family struct

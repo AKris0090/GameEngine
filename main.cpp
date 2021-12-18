@@ -8,6 +8,8 @@ VulkanRenderer vkR;
 SDL_Window* displayWindow;
 
 void cleanup(VulkanRenderer v) {
+    vkDestroyPipelineLayout(v.device, v.pipeLineLayout, nullptr);
+
     for (auto imageView : v.SWChainImageViews) {
         vkDestroyImageView(v.device, imageView, nullptr);
     }
