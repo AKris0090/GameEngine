@@ -9,6 +9,8 @@ SDL_Window* displayWindow;
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
 void cleanup() {
+    vkR.cleanupSWChain();
+
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         vkDestroySemaphore(vkR.device, vkR.imageAcquiredSema[i], nullptr);
         vkDestroySemaphore(vkR.device, vkR.renderedSema[i], nullptr);

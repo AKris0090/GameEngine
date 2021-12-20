@@ -59,7 +59,7 @@ public:
 	std::vector<VkFence> inFlightFences;
 	std::vector<VkFence> imagesInFlight;
 
-
+	// IF NEEDED, HANDLE WINDOW MINIMIZATION AND RESIZE
 
 	// Swap chain support details struct - holds information to create the swapchain
 	struct SWChainSuppDetails {
@@ -114,6 +114,9 @@ public:
 	void createCommandBuffers();
 	// Create the semaphores, signaling objects to allow asynchronous tasks to happen at the same time
 	void createSemaphores(const int maxFramesInFlight);
+
+	void cleanupSWChain();
+	void recreateSwapChain(SDL_Window* window);
 
 
 	// Helper methods for the graphics pipeline

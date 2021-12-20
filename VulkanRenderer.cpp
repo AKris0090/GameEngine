@@ -944,3 +944,41 @@ void VulkanRenderer::createSemaphores(const int maxFramesInFlight) {
         }
     }
 }
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/*
+SWAPCHAIN RECREATION AND OTHER RAYTRACING METHODS
+*/
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void VulkanRenderer::cleanupSWChain() {
+    for (size_t i = 0; i < SWChainFrameBuffers.size(); i++) {
+        vkDestroyFramebuffer(device, SWChainFrameBuffers[i], nullptr);
+    }
+
+    vkFreeCommandBuffers(device, commandPool, static_cast<uint32_t>(commandBuffers.size()), commandBuffers.data());
+
+    vkDestroyPipeline(device, graphicsPipeline, nullptr);
+    vkDestroyPipelineLayout(device, pipeLineLayout, nullptr);
+    vkDestroyRenderPass(device, renderPass, nullptr);
+
+    for (size_t i = 0; i < SWChainImageViews.size(); i++) {
+        vkDestroyImageView(device, SWChainImageViews[i], nullptr);
+    }
+
+    vkDestroySwapchainKHR(device, swapChain, nullptr);
+}
+
+void VulkanRenderer::recreateSwapChain(SDL_Window* window) {
+    vkDeviceWaitIdle(device);
+
+    cleanupSWChain();
+
+    createSWChain(window);
+    createImageViews();
+    createRenderPass();
+    createGraphicsPipeline();
+    createFrameBuffer();
+    createCommandBuffers();
+}

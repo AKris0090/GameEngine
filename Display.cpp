@@ -34,7 +34,15 @@ void Display::drawNewFrame(VulkanRenderer v, int maxFramesInFlight, std::vector<
     // Acquire an image from the swap chain, execute the command buffer with the image attached in the framebuffer, and return to swap chain as ready to present
     uint32_t imageIndex;
     // Disable the timeout with UINT64_MAX
-    vkAcquireNextImageKHR(v.device, v.swapChain, UINT64_MAX, v.imageAcquiredSema[currentFrame], VK_NULL_HANDLE, &imageIndex);
+    VkResult res1 = vkAcquireNextImageKHR(v.device, v.swapChain, UINT64_MAX, v.imageAcquiredSema[currentFrame], VK_NULL_HANDLE, &imageIndex);
+
+    if (res1 == VK_ERROR_OUT_OF_DATE_KHR) {
+        v.recreateSwapChain(window);
+        return;
+    }
+    else if (res1 != VK_SUCCESS && res1 != VK_SUBOPTIMAL_KHR) {
+        std::_Xruntime_error("Failed to acquire a swap chain image!");
+    }
 
     // Check to make sure previous frame isnt using the image
     if (imagesInFlight[imageIndex] != VK_NULL_HANDLE) {
@@ -87,7 +95,13 @@ void Display::drawNewFrame(VulkanRenderer v, int maxFramesInFlight, std::vector<
     // Check if the presentation was successful
     presentInfo.pResults = nullptr;
 
-    vkQueuePresentKHR(v.presentQueue, &presentInfo);
+    VkResult res2 = vkQueuePresentKHR(v.presentQueue, &presentInfo);
+    if (res2 == VK_ERROR_OUT_OF_DATE_KHR || res2 == VK_SUBOPTIMAL_KHR) {
+        v.recreateSwapChain(window);
+    }
+    else if (res2 != VK_SUCCESS) {
+        std::_Xruntime_error("Failed to present a swap chain image!");
+    }
 
     currentFrame = (currentFrame + 1) % maxFramesInFlight;
 }
