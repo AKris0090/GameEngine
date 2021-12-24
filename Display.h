@@ -3,6 +3,7 @@
 #include "SDL.h"
 #include "VulkanRenderer.h"
 
+
 class Display {
 
 public:
@@ -10,4 +11,5 @@ public:
 
 	SDL_Window* initDisplay(const char* appName);
 	void drawNewFrame(VulkanRenderer v, int maxFramesInFlight, std::vector<VkFence> inFlightFences, std::vector<VkFence> imagesInFlight);
+	void updateUniformBuffer(uint32_t currentImageIndex, VulkanRenderer vkR);
 };

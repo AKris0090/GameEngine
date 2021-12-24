@@ -11,21 +11,13 @@
 #include <iostream>
 #include <fstream>
 
+#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
+
 #ifdef NDEBUG
 const bool enableValLayers = false;
 #else
 const bool enableValLayers = true;
 #endif
-
-// Extension and validation arrays
-const std::vector<const char*> extNames{};
-const std::vector<const char*> validationLayers = {
-    "VK_LAYER_KHRONOS_validation"
-};
-const std::vector<const char*> deviceExts = {
-    "VK_KHR_swapchain"
-};
-
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /*
@@ -436,29 +428,36 @@ void VulkanRenderer::createLogicalDevice() {
     // Specifying device features through another struct
     VkPhysicalDeviceFeatures gpuFeatures{};
 
-    // Create the logical device, filling in with the create info structs
-    VkDeviceCreateInfo cInfo{};
-    cInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    cInfo.queueCreateInfoCount = static_cast<uint32_t>(queuecInfos.size());
-    cInfo.pQueueCreateInfos = queuecInfos.data();
+    // Add the feature structs on the pNext of the vkDeviceCreateInfo
+    VkPhysicalDeviceAccelerationStructureFeaturesKHR accelFeature{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR };
+    VkPhysicalDeviceRayTracingPipelineFeaturesKHR rtPipelineFeature{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR };
+    rtPipelineFeature.pNext = &accelFeature;
 
-    cInfo.pEnabledFeatures = &gpuFeatures;
+
+    // Create the logical device, filling in with the create info structs
+    VkDeviceCreateInfo deviceCInfo{};
+    deviceCInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    deviceCInfo.pNext = &rtPipelineFeature;
+    deviceCInfo.queueCreateInfoCount = static_cast<uint32_t>(queuecInfos.size());
+    deviceCInfo.pQueueCreateInfos = queuecInfos.data();
+
+    deviceCInfo.pEnabledFeatures = &gpuFeatures;
 
     // Set enabledLayerCount and ppEnabledLayerNames fields to be compatible with older implementations of Vulkan
-    cInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExts.size());
-    cInfo.ppEnabledExtensionNames = deviceExts.data();
+    deviceCInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExts.size());
+    deviceCInfo.ppEnabledExtensionNames = deviceExts.data();
 
     // If validation layers are enabled, then fill create info struct with size and name information
     if (enableValLayers) {
-        cInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
-        cInfo.ppEnabledLayerNames = validationLayers.data();
+        deviceCInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
+        deviceCInfo.ppEnabledLayerNames = validationLayers.data();
     }
     else {
-        cInfo.enabledLayerCount = 0;
+        deviceCInfo.enabledLayerCount = 0;
     }
 
     // Instantiate
-    if (vkCreateDevice(GPU, &cInfo, nullptr, &device) != VK_SUCCESS) {
+    if (vkCreateDevice(GPU, &deviceCInfo, nullptr, &device) != VK_SUCCESS) {
         std::_Xruntime_error("failed to instantiate logical device!");
     }
 
@@ -570,6 +569,30 @@ void VulkanRenderer::createRenderPass() {
     }
 }
 
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/*
+DESCRIPTOR SET LAYOUT
+*/
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void VulkanRenderer::createDescriptorSetLayout() {
+    VkDescriptorSetLayoutBinding UBOLayoutBinding{};
+    UBOLayoutBinding.binding = 0;
+    UBOLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    UBOLayoutBinding.descriptorCount = 1;
+
+    UBOLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    UBOLayoutBinding.pImmutableSamplers = nullptr;
+
+    VkDescriptorSetLayoutCreateInfo layoutCInfo{};
+    layoutCInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutCInfo.bindingCount = 1;
+    layoutCInfo.pBindings = &UBOLayoutBinding;
+
+    if (vkCreateDescriptorSetLayout(device, &layoutCInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
+        std::_Xruntime_error("Failed to create the descriptor set layout!");
+    }
+}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /*
@@ -605,10 +628,14 @@ void VulkanRenderer::createGraphicsPipeline() {
     // Describing the format of the vertex data to be passed to the vertex shader
     VkPipelineVertexInputStateCreateInfo vertexInputCInfo{};
     vertexInputCInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    vertexInputCInfo.vertexBindingDescriptionCount = 0;
-    vertexInputCInfo.pVertexBindingDescriptions = nullptr;
-    vertexInputCInfo.vertexAttributeDescriptionCount = 0;
-    vertexInputCInfo.pVertexAttributeDescriptions = nullptr;
+
+    auto bindingDescription = Vertex::getBindingDescription();
+    auto attributeDescriptions = Vertex::getAttributeDescriptions();
+
+    vertexInputCInfo.vertexBindingDescriptionCount = 1;
+    vertexInputCInfo.pVertexBindingDescriptions = &bindingDescription;
+    vertexInputCInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());;
+    vertexInputCInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
 
     // Next struct describes what kind of geometry will be drawn from the verts and if primitive restart should be enabled
     VkPipelineInputAssemblyStateCreateInfo inputAssemblyCInfo{};
@@ -652,7 +679,7 @@ void VulkanRenderer::createGraphicsPipeline() {
     rasterizerCInfo.lineWidth = 1.0f;
     // Specify type of culling and and the vertex order for the faces to be considered
     rasterizerCInfo.cullMode = VK_CULL_MODE_BACK_BIT;
-    rasterizerCInfo.frontFace = VK_FRONT_FACE_CLOCKWISE;
+    rasterizerCInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
 
     // Alter depth values by adding constant or biasing them based on a fragment's slope
     rasterizerCInfo.depthBiasEnable = VK_FALSE;
@@ -719,7 +746,7 @@ void VulkanRenderer::createGraphicsPipeline() {
         VK_DYNAMIC_STATE_LINE_WIDTH
     };
 
-    VkPipelineDynamicStateCreateInfo dynamicStateCInfo{};
+    VkPipelineDynamicStateCreateInfo dynamicStateCInfo{};   
     dynamicStateCInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
     dynamicStateCInfo.dynamicStateCount = 2;
     dynamicStateCInfo.pDynamicStates = dynaStates;
@@ -728,8 +755,8 @@ void VulkanRenderer::createGraphicsPipeline() {
     // Initialize the pipeline layout with another create info struct
     VkPipelineLayoutCreateInfo pipeLineLayoutCInfo{};
     pipeLineLayoutCInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipeLineLayoutCInfo.setLayoutCount = 0;
-    pipeLineLayoutCInfo.pSetLayouts = nullptr;
+    pipeLineLayoutCInfo.setLayoutCount = 1;
+    pipeLineLayoutCInfo.pSetLayouts = &descriptorSetLayout;
     pipeLineLayoutCInfo.pushConstantRangeCount = 0;
     pipeLineLayoutCInfo.pPushConstantRanges = nullptr;
 
@@ -843,6 +870,180 @@ void VulkanRenderer::createFrameBuffer() {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /*
+CREATE THE VERTEX, INDEX, AND UNIFORM BUFFERS
+*/
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+uint32_t VulkanRenderer::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) {
+    for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
+        if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
+            return i;
+        }
+    }
+
+    std::_Xruntime_error("Failed to find a suitable memory type!");
+}
+
+void VulkanRenderer::createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory) {
+    VkBufferCreateInfo bufferCInfo{};
+    bufferCInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferCInfo.size = size;
+    bufferCInfo.usage = usage;
+    bufferCInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    if (vkCreateBuffer(device, &bufferCInfo, nullptr, &buffer) != VK_SUCCESS) {
+        std::_Xruntime_error("Failed to create the vertex buffer!");
+    }
+
+    vkGetPhysicalDeviceMemoryProperties(GPU, &memProperties);
+    vkGetBufferMemoryRequirements(device, buffer, &memRequirements);
+
+    VkMemoryAllocateInfo allocateInfo{};
+    allocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocateInfo.allocationSize = memRequirements.size;
+    allocateInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
+
+    if (vkAllocateMemory(device, &allocateInfo, nullptr, &bufferMemory) != VK_SUCCESS) {
+        std::_Xruntime_error("Failed to allocate buffer memory!");
+    }
+
+    vkBindBufferMemory(device, buffer, bufferMemory, 0);
+}
+
+void VulkanRenderer::copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
+    VkCommandBufferAllocateInfo allocateInfo{};
+    allocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocateInfo.commandPool = commandPool;
+    allocateInfo.commandBufferCount = 1;
+
+    VkCommandBuffer commandBuffer;
+    vkAllocateCommandBuffers(device, &allocateInfo, &commandBuffer);
+
+    VkCommandBufferBeginInfo beginInfo{};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+    vkBeginCommandBuffer(commandBuffer, &beginInfo);
+    VkBufferCopy copyRegion{};
+    copyRegion.srcOffset = 0;
+    copyRegion.dstOffset = 0;
+    copyRegion.size = size;
+    vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
+    vkEndCommandBuffer(commandBuffer);
+
+    VkSubmitInfo submitInfo{};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &commandBuffer;
+
+    vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+    vkQueueWaitIdle(graphicsQueue);
+
+    vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
+}
+
+void VulkanRenderer::createVertexBuffer() {
+    VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
+
+    VkBuffer stagingBuffer;
+    VkDeviceMemory stagingBufferMemory;
+    createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+
+    void* data;
+    vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
+    memcpy(data, vertices.data(), (size_t)bufferSize);
+    vkUnmapMemory(device, stagingBufferMemory);
+
+    createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferMemory);
+    copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
+
+    vkDestroyBuffer(device, stagingBuffer, nullptr);
+    vkFreeMemory(device, stagingBufferMemory, nullptr);
+}
+
+void VulkanRenderer::createIndexBuffer() {
+    VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
+
+    VkBuffer stagingBuffer;
+    VkDeviceMemory stagingBufferMemory;
+    createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+
+    void* data;
+    vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
+    memcpy(data, indices.data(), (size_t)bufferSize);
+    vkUnmapMemory(device, stagingBufferMemory);
+
+    createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer, indexBufferMemory);
+
+    copyBuffer(stagingBuffer, indexBuffer, bufferSize);
+
+    vkDestroyBuffer(device, stagingBuffer, nullptr);
+    vkFreeMemory(device, stagingBufferMemory, nullptr);
+}
+
+void VulkanRenderer::createUniformBuffers() {
+    VkDeviceSize bufferSize = sizeof(UniformBufferObject);
+
+    uniformBuffers.resize(SWChainImages.size());
+    uniformBuffersMemory.resize(SWChainImages.size());
+
+    for (size_t i = 0; i < SWChainImages.size(); i++) {
+        createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformBuffers[i], uniformBuffersMemory[i]);
+    }
+}
+
+void VulkanRenderer::createDescriptorPool() {
+    VkDescriptorPoolSize poolSize{};
+    poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    poolSize.descriptorCount = static_cast<uint32_t>(SWChainImages.size());
+
+    VkDescriptorPoolCreateInfo poolCInfo{};
+    poolCInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolCInfo.poolSizeCount = 1;
+    poolCInfo.pPoolSizes = &poolSize;
+    poolCInfo.maxSets = static_cast<uint32_t>(SWChainImages.size());
+
+    if (vkCreateDescriptorPool(device, &poolCInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
+        std::_Xruntime_error("Failed to create the descriptor pool!");
+    }
+}
+
+void VulkanRenderer::createDescriptorSets() {
+    std::vector<VkDescriptorSetLayout> layouts(SWChainImages.size(), descriptorSetLayout);
+    VkDescriptorSetAllocateInfo allocateInfo{};
+    allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocateInfo.descriptorPool = descriptorPool;
+    allocateInfo.descriptorSetCount = static_cast<uint32_t>(SWChainImages.size());
+    allocateInfo.pSetLayouts = layouts.data();
+
+    descriptorSets.resize(SWChainImages.size());
+    if (vkAllocateDescriptorSets(device, &allocateInfo, descriptorSets.data()) != VK_SUCCESS) {
+        std::_Xruntime_error("Failed to allocate descriptor sets!");
+    }
+
+    for (size_t i = 0; i < SWChainImages.size(); i++) {
+        VkDescriptorBufferInfo descriptorBufferInfo{};
+        descriptorBufferInfo.buffer = uniformBuffers[i];
+        descriptorBufferInfo.offset = 0;
+        descriptorBufferInfo.range = sizeof(UniformBufferObject);
+
+        VkWriteDescriptorSet descriptorWriteSet{};
+        descriptorWriteSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWriteSet.dstSet = descriptorSets[i];
+        descriptorWriteSet.dstBinding = 0;
+        descriptorWriteSet.dstArrayElement = 0;
+        descriptorWriteSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        descriptorWriteSet.descriptorCount = 1;
+        descriptorWriteSet.pBufferInfo = &descriptorBufferInfo;
+        descriptorWriteSet.pImageInfo = nullptr;
+        descriptorWriteSet.pTexelBufferView = nullptr;
+        vkUpdateDescriptorSets(device, 1, &descriptorWriteSet, 0, nullptr);
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/*
 CREATING THE COMMAND POOL AND BUFFER
 */
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -908,7 +1109,14 @@ void VulkanRenderer::createCommandBuffers() {
 
         // Bind the graphics pipeline, and instruct it to draw the triangle
         vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
-        vkCmdDraw(commandBuffers[i], 3, 1, 0, 0);
+
+        VkBuffer vertexBuffers[] = { vertexBuffer };
+        VkDeviceSize offsets[] = { 0 };
+        vkCmdBindVertexBuffers(commandBuffers[i], 0, 1, vertexBuffers, offsets);
+        vkCmdBindIndexBuffer(commandBuffers[i], indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+
+        vkCmdBindDescriptorSets(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeLineLayout, 0, 1, &descriptorSets[i], 0, nullptr);
+        vkCmdDrawIndexed(commandBuffers[i], static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
 
         // After drawing is over, end the render pass
         vkCmdEndRenderPass(commandBuffers[i]);
@@ -948,7 +1156,7 @@ void VulkanRenderer::createSemaphores(const int maxFramesInFlight) {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /*
-SWAPCHAIN RECREATION AND OTHER RAYTRACING METHODS
+SWAPCHAIN RECREATION
 */
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -968,6 +1176,13 @@ void VulkanRenderer::cleanupSWChain() {
     }
 
     vkDestroySwapchainKHR(device, swapChain, nullptr);
+
+    for (size_t i = 0; i < SWChainImages.size(); i++) {
+        vkDestroyBuffer(device, uniformBuffers[i], nullptr);
+        vkFreeMemory(device, uniformBuffersMemory[i], nullptr);
+    }
+
+    vkDestroyDescriptorPool(device, descriptorPool, nullptr);
 }
 
 void VulkanRenderer::recreateSwapChain(SDL_Window* window) {
@@ -980,5 +1195,21 @@ void VulkanRenderer::recreateSwapChain(SDL_Window* window) {
     createRenderPass();
     createGraphicsPipeline();
     createFrameBuffer();
+    createUniformBuffers();
+    createDescriptorPool();
+    createDescriptorSets();
     createCommandBuffers();
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/*
+RAYTRACING METHODS
+*/
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void VulkanRenderer::initializeRT() {
+    VkPhysicalDeviceProperties2 deviceProps2{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2 };
+    deviceProps2.pNext = &physicalDeviceRTProperties;
+    vkGetPhysicalDeviceProperties2(GPU, &deviceProps2);
 }

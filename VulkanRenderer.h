@@ -6,11 +6,28 @@
 #include <vector>
 #include <cstdio>
 #include <string>
+#include "glm-0.9.6.3/glm.hpp"
+#include <array>
+
+#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 
 class VulkanRenderer {
 
 private:
 public:
+
+	// Extension and validation arrays
+	const std::vector<const char*> extNames{};
+	const std::vector<const char*> validationLayers = {
+		"VK_LAYER_KHRONOS_validation"
+	};
+	const std::vector<const char*> deviceExts = {
+		"VK_KHR_swapchain",
+		VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
+		VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
+		VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME
+	};
+
 
 	// Handles for all variables, made public so they can be accessed by main
 	VkInstance instance;
@@ -32,6 +49,8 @@ public:
 
 	// Color Blending
 	bool colorBlendEnable = true;
+
+	VkDescriptorSetLayout descriptorSetLayout;
 
 	// Pipeline Layout for "gloabls" to change shaders
 	VkPipelineLayout pipeLineLayout;
@@ -61,6 +80,65 @@ public:
 
 	// IF NEEDED, HANDLE WINDOW MINIMIZATION AND RESIZE
 
+	VkBuffer vertexBuffer;
+	VkDeviceMemory vertexBufferMemory;
+
+	VkBuffer indexBuffer;
+	VkDeviceMemory indexBufferMemory;
+
+	std::vector<VkBuffer> uniformBuffers;
+	std::vector<VkDeviceMemory> uniformBuffersMemory;
+
+	VkMemoryRequirements memRequirements;
+	VkPhysicalDeviceMemoryProperties memProperties;
+	uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
+
+	VkDescriptorPool descriptorPool;
+	std::vector<VkDescriptorSet> descriptorSets;
+
+	struct UniformBufferObject {
+		alignas(16) glm::mat4 model;
+		alignas(16) glm::mat4 view;
+		alignas(16) glm::mat4 proj;
+	};
+
+	struct Vertex {
+		glm::vec2 pos;
+		glm::vec3 color;
+
+		static VkVertexInputBindingDescription getBindingDescription() {
+			VkVertexInputBindingDescription bindingDescription{};
+			bindingDescription.binding = 0;
+			bindingDescription.stride = sizeof(Vertex);
+			bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+			return bindingDescription;
+		}
+
+		static std::array<VkVertexInputAttributeDescription, 2> getAttributeDescriptions() {
+			std::array<VkVertexInputAttributeDescription, 2> attributeDescriptions{};
+			attributeDescriptions[0].binding = 0;
+			attributeDescriptions[0].location = 0;
+			attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
+			attributeDescriptions[0].offset = offsetof(Vertex, pos);
+			attributeDescriptions[1].binding = 0;
+			attributeDescriptions[1].location = 1;
+			attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+			attributeDescriptions[1].offset = offsetof(Vertex, color);
+			return attributeDescriptions;
+		}
+	};
+
+	const std::vector<uint16_t> indices = {
+	0, 1, 2, 2, 3, 0
+	};
+
+	const std::vector<Vertex> vertices = {
+		{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+		{{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+		{{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+		{{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
+	};
+
 	// Swap chain support details struct - holds information to create the swapchain
 	struct SWChainSuppDetails {
 		VkSurfaceCapabilitiesKHR capabilities;
@@ -78,7 +156,7 @@ public:
 #else
 	const bool enableValLayers = true;
 #endif
-	
+
 	// Create the vulkan instance
 	VkInstance createVulkanInstance(SDL_Window* window, const char* appName);
 	// Check if the validation layers requested are supported
@@ -104,6 +182,9 @@ public:
 	void createImageViews();
 	// Create the render pass
 	void createRenderPass();
+
+	void createDescriptorSetLayout();
+
 	// Create the graphics pipeline
 	void createGraphicsPipeline();
 	// Creating the all-important frame buffer
@@ -112,16 +193,30 @@ public:
 	void createCommandPool();
 	// Create a list of command buffer objects
 	void createCommandBuffers();
+
+	void createVertexBuffer();
+	void createIndexBuffer();
+	void createUniformBuffers();
+	void createDescriptorPool();
+	void createDescriptorSets();
+
 	// Create the semaphores, signaling objects to allow asynchronous tasks to happen at the same time
 	void createSemaphores(const int maxFramesInFlight);
 
+	// Additional swap chain methods
 	void cleanupSWChain();
 	void recreateSwapChain(SDL_Window* window);
-
 
 	// Helper methods for the graphics pipeline
 	static std::vector<char> readFile(const std::string& fileName);
 	VkShaderModule createShaderModule(const std::vector<char>& binary);
+	
+	void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
+	void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory);
+
+	// Ray tracing methods and handles
+	VkPhysicalDeviceRayTracingPipelinePropertiesKHR physicalDeviceRTProperties{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR };
+	void initializeRT();
 
 
 	// Queue family struct
@@ -133,7 +228,7 @@ public:
 		std::optional<uint32_t> presentFamily;
 
 		// General check to make things a bit more conveneient
-		bool isComplete() { 
+		bool isComplete() {
 			return (graphicsFamily.has_value() && presentFamily.has_value());
 		}
 	};

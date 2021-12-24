@@ -11,6 +11,19 @@ const int MAX_FRAMES_IN_FLIGHT = 2;
 void cleanup() {
     vkR.cleanupSWChain();
 
+    vkDestroyDescriptorSetLayout(vkR.device, vkR.descriptorSetLayout, nullptr);
+
+    vkDestroyBuffer(vkR.device, vkR.indexBuffer, nullptr);
+    vkFreeMemory(vkR.device, vkR.indexBufferMemory, nullptr);
+
+    vkDestroyBuffer(vkR.device, vkR.vertexBuffer, nullptr);
+    vkFreeMemory(vkR.device, vkR.vertexBufferMemory, nullptr);
+
+    for (size_t i = 0; i < vkR.SWChainImages.size(); i++) {
+        vkDestroyBuffer(vkR.device, vkR.uniformBuffers[i], nullptr);
+        vkFreeMemory(vkR.device, vkR.uniformBuffersMemory[i], nullptr);
+    }
+
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         vkDestroySemaphore(vkR.device, vkR.imageAcquiredSema[i], nullptr);
         vkDestroySemaphore(vkR.device, vkR.renderedSema[i], nullptr);
@@ -83,11 +96,25 @@ void initVulkan() {
 
     vkR.createRenderPass();
 
+    vkR.initializeRT();
+
+    vkR.createDescriptorSetLayout();
+
     vkR.createGraphicsPipeline();
 
     vkR.createFrameBuffer();
 
     vkR.createCommandPool();
+
+    vkR.createVertexBuffer();
+
+    vkR.createIndexBuffer();
+
+    vkR.createUniformBuffers();
+
+    vkR.createDescriptorPool();
+
+    vkR.createDescriptorSets();
 
     vkR.createCommandBuffers();
 

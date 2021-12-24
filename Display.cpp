@@ -4,7 +4,11 @@
 #include <cstdio>
 #include "vulkan/vulkan.h"
 #include "VulkanRenderer.h"
+#include "glm-0.9.6.3/glm.hpp"
+#include "glm-0.9.6.3/gtc/matrix_transform.hpp"
+#include <chrono>
 
+#define GLM_FORCE_RADIANS
 #define SDL_MAIN_HANDLED
 
 #define SCREEN_WIDTH 800
@@ -27,6 +31,24 @@ SDL_Window* Display::initDisplay(const char* appName) {
     return window;
 }
 
+void Display::updateUniformBuffer(uint32_t currentImage, VulkanRenderer vkR) {
+    static auto startTime = std::chrono::high_resolution_clock::now();
+
+    auto currentTime = std::chrono::high_resolution_clock::now();
+    float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+
+    VulkanRenderer::UniformBufferObject ubo{};
+    ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+    ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+    ubo.proj = glm::perspective(glm::radians(45.0f), vkR.SWChainExtent.width / (float)vkR.SWChainExtent.height, 0.1f, 10.0f);
+    ubo.proj[1][1] *= -1;
+
+    void* data;
+    vkMapMemory(vkR.device, vkR.uniformBuffersMemory[currentImage], 0, sizeof(ubo), 0, &data);
+    memcpy(data, &ubo, sizeof(ubo));
+    vkUnmapMemory(vkR.device, vkR.uniformBuffersMemory[currentImage]);
+}
+
 void Display::drawNewFrame(VulkanRenderer v, int maxFramesInFlight, std::vector<VkFence> inFlightFences, std::vector<VkFence> imagesInFlight) {
     // Wait for the frame to be finished, with the fences
     vkWaitForFences(v.device, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
@@ -43,6 +65,8 @@ void Display::drawNewFrame(VulkanRenderer v, int maxFramesInFlight, std::vector<
     else if (res1 != VK_SUCCESS && res1 != VK_SUBOPTIMAL_KHR) {
         std::_Xruntime_error("Failed to acquire a swap chain image!");
     }
+
+    updateUniformBuffer(imageIndex, v);
 
     // Check to make sure previous frame isnt using the image
     if (imagesInFlight[imageIndex] != VK_NULL_HANDLE) {
