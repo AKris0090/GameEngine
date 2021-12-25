@@ -11,6 +11,12 @@ const int MAX_FRAMES_IN_FLIGHT = 2;
 void cleanup() {
     vkR.cleanupSWChain();
 
+    vkDestroySampler(vkR.device, vkR.textureSampler, nullptr);
+    vkDestroyImageView(vkR.device, vkR.textureImageView, nullptr);
+
+    vkDestroyImage(vkR.device, vkR.textureImage, nullptr);
+    vkFreeMemory(vkR.device, vkR.textureImageMemory, nullptr);
+
     vkDestroyDescriptorSetLayout(vkR.device, vkR.descriptorSetLayout, nullptr);
 
     vkDestroyBuffer(vkR.device, vkR.indexBuffer, nullptr);
@@ -105,6 +111,12 @@ void initVulkan() {
     vkR.createFrameBuffer();
 
     vkR.createCommandPool();
+
+    vkR.createTextureImage();
+
+    vkR.createTextureImageView();
+
+    vkR.createTextureImageSampler();
 
     vkR.createVertexBuffer();
 
