@@ -12,7 +12,10 @@
 #include <fstream>
 #include <stb_image.h>
 #include <array>
+#include <tiny_obj_loader.h>
+#include <unordered_map>
 
+#define TINYOBJLOADER_IMPLEMENTATION
 #define STB_IMAGE_IMPLEMENTATION
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
@@ -689,7 +692,7 @@ void VulkanRenderer::createGraphicsPipeline() {
     // Linewidth describes thickness of lines in terms of number of fragments 
     rasterizerCInfo.lineWidth = 1.0f;
     // Specify type of culling and and the vertex order for the faces to be considered
-    rasterizerCInfo.cullMode = VK_CULL_MODE_BACK_BIT;
+    rasterizerCInfo.cullMode = VK_CULL_MODE_NONE;
     rasterizerCInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
 
     // Alter depth values by adding constant or biasing them based on a fragment's slope
@@ -884,6 +887,45 @@ void VulkanRenderer::createFrameBuffer() {
 
         if (vkCreateFramebuffer(device, &frameBufferCInfo, nullptr, &SWChainFrameBuffers[i]) != VK_SUCCESS) {
             std::_Xruntime_error("Failed to create a framebuffer for an image view!");
+        }
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/*
+MODEL LOADER
+*/
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void VulkanRenderer::loadModel() {
+    tinyobj::attrib_t attrib;
+    std::vector<tinyobj::shape_t> shapes;
+    std::vector<tinyobj::material_t> materials;
+    std::string warn, err;
+
+    if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, MODEL_PATH.c_str())) {
+        throw std::runtime_error(warn + err);
+    }
+
+    for (const auto& shape : shapes) {
+        for (const auto& index : shape.mesh.indices) {
+            VulkanRenderer::Vertex vertex{};
+
+            vertex.pos = {
+                attrib.vertices[3 * index.vertex_index + 0],
+                attrib.vertices[3 * index.vertex_index + 1],
+                attrib.vertices[3 * index.vertex_index + 2]
+            };
+
+            vertex.texCoord = {
+                attrib.texcoords[2 * index.texcoord_index + 0],
+                1.0f - attrib.texcoords[2 * index.texcoord_index + 1]
+            };
+
+            vertex.color = { 1.0f, 1.0f, 1.0f };
+
+            vertices.push_back(vertex);
+            indices.push_back(indices.size());
         }
     }
 }
@@ -1315,7 +1357,12 @@ void VulkanRenderer::transitionImageLayout(VkImage image, VkFormat format, VkIma
     barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrier.image = image;
-    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    if (format == VK_FORMAT_D32_SFLOAT) {
+        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+    }
+    else {
+        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    }
     barrier.subresourceRange.baseMipLevel = 0;
     barrier.subresourceRange.levelCount = 1;
     barrier.subresourceRange.baseArrayLayer = 0;
@@ -1353,14 +1400,12 @@ void VulkanRenderer::transitionImageLayout(VkImage image, VkFormat format, VkIma
 
     vkCmdPipelineBarrier(commandBuffer, sourceStage, destinationStage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
 
-    vkCmdPipelineBarrier(commandBuffer, sourceStage, destinationStage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
-
     endSingleTimeCommands(commandBuffer);
 }
 
 void VulkanRenderer::createTextureImage() {
     int textureWidth, textureHeight, texChannels;
-    stbi_uc* pixels = stbi_load("Images/texture.jpg", &textureWidth, &textureHeight, &texChannels, STBI_rgb_alpha);
+    stbi_uc* pixels = stbi_load(TEXTURE_PATH.c_str(), &textureWidth, &textureHeight, &texChannels, STBI_rgb_alpha);
     VkDeviceSize currentImageSize = textureWidth * textureHeight * 4;
 
     if (!pixels) {
@@ -1410,7 +1455,6 @@ VkImageView VulkanRenderer::createImageView(VkImage image, VkFormat format, VkIm
 
 void VulkanRenderer::createTextureImageView() {
     textureImageView = createImageView(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
-
 }
 
 void VulkanRenderer::createTextureImageSampler() {

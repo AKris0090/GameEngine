@@ -8,11 +8,18 @@
 #include <string>
 #include "glm-0.9.6.3/glm.hpp"
 #include <array>
+#include <tiny_obj_loader.h>
 
+
+#define TINYOBJLOADER_IMPLEMENTATION
 #define STB_IMAGE_IMPLEMENTATION
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
+
+const std::string MODEL_PATH = "VikingRoom/OBJ.obj";
+const std::string TEXTURE_PATH = "VikingRoom/Material.png";
+//const std::string TEXTURE_PATH = "Images/texture.jpg";
 
 class VulkanRenderer {
 
@@ -143,22 +150,8 @@ public:
 		}
 	};
 
-	const std::vector<uint16_t> indices = {
-		0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4
-	};
-
-
-	const std::vector<Vertex> vertices = {
-		{{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
-		{{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
-		{{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
-		{{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}},
-
-		{{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
-		{{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
-		{{0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
-		{{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}}
-	};
+	std::vector<uint16_t> indices = {};
+	std::vector<Vertex> vertices = {};
 
 	// Swap chain support details struct - holds information to create the swapchain
 	struct SWChainSuppDetails {
@@ -227,6 +220,7 @@ public:
 	// Create a list of command buffer objects
 	void createCommandBuffers();
 
+	void loadModel();
 	void createVertexBuffer();
 	void createIndexBuffer();
 	void createUniformBuffers();

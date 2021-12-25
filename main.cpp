@@ -124,6 +124,8 @@ void initVulkan() {
 
     vkR.createTextureImageSampler();
 
+    vkR.loadModel();
+
     vkR.createVertexBuffer();
 
     vkR.createIndexBuffer();
