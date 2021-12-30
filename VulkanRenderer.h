@@ -1,6 +1,6 @@
 #pragma once
 
-#include "vulkan/vulkan.h"
+#include <volk.h>
 #include "SDL.h"
 #include <optional>
 #include <vector>
@@ -9,7 +9,6 @@
 #include "glm-0.9.6.3/glm.hpp"
 #include <array>
 #include <tiny_obj_loader.h>
-
 
 #define TINYOBJLOADER_IMPLEMENTATION
 #define STB_IMAGE_IMPLEMENTATION
@@ -27,15 +26,18 @@ private:
 public:
 
 	// Extension and validation arrays
-	const std::vector<const char*> extNames{};
 	const std::vector<const char*> validationLayers = {
 		"VK_LAYER_KHRONOS_validation"
 	};
 	const std::vector<const char*> deviceExts = {
-		"VK_KHR_swapchain",
+		VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 		VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
-		VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
-		VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME
+		VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
+		VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
+		"VK_KHR_buffer_device_address",
+		"VK_EXT_buffer_device_address",
+		"VK_EXT_descriptor_indexing",
+		"VK_EXT_host_query_reset"
 	};
 
 
@@ -113,6 +115,8 @@ public:
 	VkDescriptorPool descriptorPool;
 	std::vector<VkDescriptorSet> descriptorSets;
 
+	VkFence commandFence;
+
 	struct UniformBufferObject {
 		alignas(16) glm::mat4 model;
 		alignas(16) glm::mat4 view;
@@ -150,8 +154,15 @@ public:
 		}
 	};
 
-	std::vector<uint16_t> indices = {};
-	std::vector<Vertex> vertices = {};
+	struct Model {
+		uint32_t totalIndices;
+		uint32_t totalVertices;
+
+		std::vector<uint16_t> indices = {};
+		std::vector<Vertex> vertices = {};
+	};
+
+	std::vector<Model> loadedModels;
 
 	// Swap chain support details struct - holds information to create the swapchain
 	struct SWChainSuppDetails {
@@ -246,8 +257,34 @@ public:
 	void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory);
 
 	// Ray tracing methods and handles
+	struct BLASInput {
+		std::vector<VkAccelerationStructureGeometryKHR> geoData;
+		std::vector<VkAccelerationStructureBuildRangeInfoKHR> offsetData;
+		VkBuildAccelerationStructureFlagsKHR flags{ 0 };
+	};
+
+	struct BuildAccelerationStructure {
+		VkAccelerationStructureBuildGeometryInfoKHR buildInfo;
+		const VkAccelerationStructureBuildRangeInfoKHR* rangeInfo;
+		VkAccelerationStructureBuildSizesInfoKHR sizeInfo;
+		VkAccelerationStructureKHR accelStructure;
+
+		void cleanupAS(VkDevice device) {
+			vkDestroyAccelerationStructureKHR(device, accelStructure, nullptr);
+		}
+	};
+
+	std::vector<VkAccelerationStructureKHR> bottomLevelAccelerationStructures;
+	uint32_t numModels = 0;
+
 	VkPhysicalDeviceRayTracingPipelinePropertiesKHR physicalDeviceRTProperties{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR };
 	void initializeRT();
+	VkDeviceAddress getDeviceAddress(VkBuffer buffer);
+	BLASInput BLASObjectToGeometry(Model model);
+	void createBottomLevelAS();
+	void buildBlas(const std::vector<BLASInput>& input, VkBuildAccelerationStructureFlagsKHR flags);
+	void CMDCreateBLAS(std::vector<uint32_t> indices, std::vector<BuildAccelerationStructure> buildAS, VkDeviceAddress scratchBufferAddress, VkQueryPool queryPool);
+	void CMDCompactBLAS(std::vector<uint32_t> indices, std::vector<BuildAccelerationStructure> buildAS, VkQueryPool queryPool);
 
 
 	// Queue family struct

@@ -8,6 +8,9 @@ VulkanRenderer vkR;
 SDL_Window* displayWindow;
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
+#define VOLK_IMPLEMENTATION
+#include <volk.h>
+
 void cleanup() {
     vkR.cleanupSWChain();
 
@@ -88,7 +91,11 @@ void executeVulkanSDLLoop(Display d) {
 }
 
 void initVulkan() {
+    volkInitialize();
+
     vkR.instance = vkR.createVulkanInstance(displayWindow, "Vulkan Game Engine");
+
+    volkLoadInstance(vkR.instance);
 
     if (vkR.enableValLayers) {
         vkR.setupDebugMessenger(vkR.instance, vkR.debugMessenger);
@@ -100,13 +107,13 @@ void initVulkan() {
 
     vkR.createLogicalDevice();
 
+    volkLoadDevice(vkR.device);
+
     vkR.createSWChain(displayWindow);
 
     vkR.createImageViews();
 
     vkR.createRenderPass();
-
-    vkR.initializeRT();
 
     vkR.createDescriptorSetLayout();
 
@@ -136,9 +143,13 @@ void initVulkan() {
 
     vkR.createDescriptorSets();
 
+    vkR.initializeRT();
+
     vkR.createCommandBuffers();
 
     vkR.createSemaphores(MAX_FRAMES_IN_FLIGHT);
+
+    //vkR.createBottomLevelAS();
 }
 
 int main(int argc, char** arcgv) {

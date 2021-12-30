@@ -2,7 +2,7 @@
 #include "SDL.h"
 #include "SDL_vulkan.h"
 #include <cstdio>
-#include "vulkan/vulkan.h"
+#include <volk.h>
 #include "VulkanRenderer.h"
 #include "glm-0.9.6.3/glm.hpp"
 #include "glm-0.9.6.3/gtc/matrix_transform.hpp"
@@ -38,7 +38,7 @@ void Display::updateUniformBuffer(uint32_t currentImage, VulkanRenderer vkR) {
     float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
     VulkanRenderer::UniformBufferObject ubo{};
-    //ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+    //ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(45.0f), glm::vec3(0.0f, 0.0f, 1.0f));
     ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
     ubo.proj = glm::perspective(glm::radians(45.0f), vkR.SWChainExtent.width / (float)vkR.SWChainExtent.height, 0.1f, 10.0f);
     ubo.proj[1][1] *= -1;
@@ -95,7 +95,11 @@ void Display::drawNewFrame(VulkanRenderer v, int maxFramesInFlight, std::vector<
     queueSubmitInfo.signalSemaphoreCount = 1;
     queueSubmitInfo.pSignalSemaphores = signaledSemaphores;
 
+    vkDeviceWaitIdle(v.device);
+
     vkResetFences(v.device, 1, &inFlightFences[currentFrame]);
+
+    vkQueueWaitIdle(v.graphicsQueue);
 
     // Finally, submit the queue info
     if (vkQueueSubmit(v.graphicsQueue, 1, &queueSubmitInfo, inFlightFences[currentFrame]) != VK_SUCCESS) {
