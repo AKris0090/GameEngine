@@ -88,13 +88,13 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\Users\arjoo\source\repos\GameEngine\volk-master;C:\Users\arjoo\source\repos\GameEngine\glm-0.9.6.3;C:\Users\arjoo\source\repos\GameEngine\tinyobjloader-master;C:\Users\arjoo\source\repos\GameEngine\stb-master;C:\Vulkan\Include;C:\SDL\SDL2\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\arjoo\Documents\Aftermath\include;C:\Users\arjoo\source\repos\GameEngine\volk-master;C:\Users\arjoo\source\repos\GameEngine\glm-0.9.6.3;C:\Users\arjoo\source\repos\GameEngine\tinyobjloader-master;C:\Users\arjoo\source\repos\GameEngine\stb-master;C:\Vulkan\Include;C:\SDL\SDL2\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>C:\SDL\SDL2\lib\x64;C:\Vulkan\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>C:\Users\arjoo\Documents\Aftermath\lib\x64;C:\SDL\SDL2\lib\x64;C:\Vulkan\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>vulkan-1.lib;SDL2.lib;SDL2main.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
@@ -106,7 +106,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\Users\arjoo\source\repos\GameEngine\volk-master;C:\Users\arjoo\source\repos\GameEngine\glm-0.9.6.3;C:\Users\arjoo\source\repos\GameEngine\tinyobjloader-master;C:\Users\arjoo\source\repos\GameEngine\stb-master;C:\Vulkan\Include;C:\SDL\SDL2\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\arjoo\Documents\Aftermath\include;C:\Users\arjoo\source\repos\GameEngine\volk-master;C:\Users\arjoo\source\repos\GameEngine\glm-0.9.6.3;C:\Users\arjoo\source\repos\GameEngine\tinyobjloader-master;C:\Users\arjoo\source\repos\GameEngine\stb-master;C:\Vulkan\Include;C:\SDL\SDL2\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
@@ -114,7 +114,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>C:\SDL\SDL2\lib\x64;C:\Vulkan\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>C:\Users\arjoo\Documents\Aftermath\lib\x64;C:\SDL\SDL2\lib\x64;C:\Vulkan\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>vulkan-1.lib;SDL2.lib;SDL2main.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
@@ -124,13 +124,13 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\Users\arjoo\source\repos\GameEngine\volk-master;C:\Users\arjoo\source\repos\GameEngine\glm-0.9.6.3;C:\Users\arjoo\source\repos\GameEngine\tinyobjloader-master;C:\Users\arjoo\source\repos\GameEngine\stb-master;C:\Vulkan\Include;C:\SDL\SDL2\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\arjoo\Documents\Aftermath\include;C:\Users\arjoo\source\repos\GameEngine\volk-master;C:\Users\arjoo\source\repos\GameEngine\glm-0.9.6.3;C:\Users\arjoo\source\repos\GameEngine\tinyobjloader-master;C:\Users\arjoo\source\repos\GameEngine\stb-master;C:\Vulkan\Include;C:\SDL\SDL2\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>C:\SDL\SDL2\lib\x64;C:\Vulkan\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>C:\Users\arjoo\Documents\Aftermath\lib\x64;C:\SDL\SDL2\lib\x64;C:\Vulkan\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>vulkan-1.lib;SDL2.lib;SDL2main.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
@@ -142,7 +142,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\Users\arjoo\source\repos\GameEngine\volk-master;C:\Users\arjoo\source\repos\GameEngine\glm-0.9.6.3;C:\Users\arjoo\source\repos\GameEngine\tinyobjloader-master;C:\Users\arjoo\source\repos\GameEngine\stb-master;C:\Vulkan\Include;C:\SDL\SDL2\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\arjoo\Documents\Aftermath\include;C:\Users\arjoo\source\repos\GameEngine\volk-master;C:\Users\arjoo\source\repos\GameEngine\glm-0.9.6.3;C:\Users\arjoo\source\repos\GameEngine\tinyobjloader-master;C:\Users\arjoo\source\repos\GameEngine\stb-master;C:\Vulkan\Include;C:\SDL\SDL2\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
@@ -150,7 +150,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>C:\SDL\SDL2\lib\x64;C:\Vulkan\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>C:\Users\arjoo\Documents\Aftermath\lib\x64;C:\SDL\SDL2\lib\x64;C:\Vulkan\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>vulkan-1.lib;SDL2.lib;SDL2main.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>

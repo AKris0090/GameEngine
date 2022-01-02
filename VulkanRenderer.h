@@ -116,6 +116,11 @@ public:
 	std::vector<VkDescriptorSet> descriptorSets;
 
 	VkFence commandFence;
+	VkQueryPool queryPool;
+	VkBuffer tempBuffer;
+	VkDeviceMemory tempBufferMemory;
+	VkBuffer tempBuffer2;
+	VkDeviceMemory tempBufferMemory2;
 
 	struct UniformBufferObject {
 		alignas(16) glm::mat4 model;
@@ -248,7 +253,7 @@ public:
 	// Helper methods for the graphics pipeline
 	static std::vector<char> readFile(const std::string& fileName);
 	VkShaderModule createShaderModule(const std::vector<char>& binary);
-	
+
 	VkCommandBuffer beginSingleTimeCommands();
 	void endSingleTimeCommands(VkCommandBuffer commandBuffer);
 	void copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
@@ -269,13 +274,17 @@ public:
 		VkAccelerationStructureBuildSizesInfoKHR sizeInfo;
 		VkAccelerationStructureKHR accelStructure;
 
+		VkAccelerationStructureKHR prevStructure;
+
 		void cleanupAS(VkDevice device) {
+			vkDestroyAccelerationStructureKHR(device, prevStructure, nullptr);
 			vkDestroyAccelerationStructureKHR(device, accelStructure, nullptr);
 		}
 	};
 
 	std::vector<VkAccelerationStructureKHR> bottomLevelAccelerationStructures;
 	uint32_t numModels = 0;
+	std::vector<BuildAccelerationStructure> buildAS;
 
 	VkPhysicalDeviceRayTracingPipelinePropertiesKHR physicalDeviceRTProperties{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR };
 	void initializeRT();
@@ -283,8 +292,8 @@ public:
 	BLASInput BLASObjectToGeometry(Model model);
 	void createBottomLevelAS();
 	void buildBlas(const std::vector<BLASInput>& input, VkBuildAccelerationStructureFlagsKHR flags);
-	void CMDCreateBLAS(std::vector<uint32_t> indices, std::vector<BuildAccelerationStructure> buildAS, VkDeviceAddress scratchBufferAddress, VkQueryPool queryPool);
-	void CMDCompactBLAS(std::vector<uint32_t> indices, std::vector<BuildAccelerationStructure> buildAS, VkQueryPool queryPool);
+	void CMDCreateBLAS(std::vector<uint32_t> indices, VkDeviceAddress scratchBufferAddress);
+	void CMDCompactBLAS(std::vector<uint32_t> indices);
 
 
 	// Queue family struct

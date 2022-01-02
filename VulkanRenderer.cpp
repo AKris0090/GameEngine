@@ -394,7 +394,7 @@ bool VulkanRenderer::isSuitable(VkPhysicalDevice physicalDevice) {
     }
 
     VkPhysicalDeviceFeatures supportedFeatures;
-    vkGetPhysicalDeviceFeatures(physicalDevice, &supportedFeatures );
+    vkGetPhysicalDeviceFeatures(physicalDevice, &supportedFeatures);
 
     return (indices.isComplete() && extsSupported && isSWChainAdequate && supportedFeatures.samplerAnisotropy);
 }
@@ -781,7 +781,7 @@ void VulkanRenderer::createGraphicsPipeline() {
         VK_DYNAMIC_STATE_LINE_WIDTH
     };
 
-    VkPipelineDynamicStateCreateInfo dynamicStateCInfo{};   
+    VkPipelineDynamicStateCreateInfo dynamicStateCInfo{};
     dynamicStateCInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
     dynamicStateCInfo.dynamicStateCount = 2;
     dynamicStateCInfo.pDynamicStates = dynaStates;
@@ -895,7 +895,7 @@ void VulkanRenderer::createFrameBuffer() {
 
     // Iterate through the image views and create framebuffers from them
     for (size_t i = 0; i < SWChainImageViews.size(); i++) {
-        std::array<VkImageView, 2> attachments = {SWChainImageViews[i], depthImageView};
+        std::array<VkImageView, 2> attachments = { SWChainImageViews[i], depthImageView };
 
         VkFramebufferCreateInfo frameBufferCInfo{};
         frameBufferCInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
@@ -989,7 +989,7 @@ void VulkanRenderer::endSingleTimeCommands(VkCommandBuffer commandBuffer) {
     submitInfo.pCommandBuffers = &commandBuffer;
 
     vkResetFences(device, 1, &commandFence);
-    
+
     vkQueueSubmit(graphicsQueue, 1, &submitInfo, commandFence);
 
     printf("submitted \n");
@@ -1465,7 +1465,7 @@ void VulkanRenderer::createTextureImage() {
     transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
     copyBufferToImage(stagingBuffer, textureImage, static_cast<uint32_t>(textureWidth), static_cast<uint32_t>(textureHeight));
     transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-    
+
     vkDestroyBuffer(device, stagingBuffer, nullptr);
     vkFreeMemory(device, stagingBufferMemory, nullptr);
 }
@@ -1600,13 +1600,13 @@ VulkanRenderer::BLASInput VulkanRenderer::BLASObjectToGeometry(Model model) {
     VkDeviceAddress indexBufferAddress = getDeviceAddress(indexBuffer);
 
     // Assuming trianlges, divide indices by 3
-    uint32_t maxNumPrimitives = (static_cast<uint32_t>(model.indices.size()) / 3);
+    uint32_t maxNumPrimitives = model.totalIndices / 3;
 
     VkAccelerationStructureGeometryTrianglesDataKHR triangles{};
     triangles.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
     triangles.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
     triangles.vertexData.deviceAddress = vertexBufferAddress;
-    triangles.vertexStride = 3;
+    triangles.vertexStride = sizeof(Vertex);
 
     triangles.indexType = VK_INDEX_TYPE_UINT32;
     triangles.indexData.deviceAddress = indexBufferAddress;
@@ -1635,7 +1635,7 @@ bool hasFlag(VkBuildAccelerationStructureFlagsKHR flags, VkBuildAccelerationStru
     return (flags && bitFlag != 0);
 }
 
-void VulkanRenderer::CMDCreateBLAS(std::vector<uint32_t> indices, std::vector<BuildAccelerationStructure> buildAS, VkDeviceAddress scratchBufferAddress, VkQueryPool queryPool) {
+void VulkanRenderer::CMDCreateBLAS(std::vector<uint32_t> indices, VkDeviceAddress scratchBufferAddress) {
     if (queryPool) {
         vkResetQueryPool(device, queryPool, 0, static_cast<uint32_t>(indices.size()));
     }
@@ -1647,13 +1647,10 @@ void VulkanRenderer::CMDCreateBLAS(std::vector<uint32_t> indices, std::vector<Bu
         accelStructureCInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
         accelStructureCInfo.size = buildAS[index].sizeInfo.accelerationStructureSize;
 
-        VkBuffer tempBuffer;
-        VkDeviceMemory tempBufferMemory;
         createBuffer(accelStructureCInfo.size, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, tempBuffer, tempBufferMemory);
 
         accelStructureCInfo.buffer = tempBuffer;
         vkCreateAccelerationStructureKHR(device, &accelStructureCInfo, nullptr, &buildAS[index].accelStructure);
-        vkDestroyBuffer(device, tempBuffer, nullptr);
 
         buildAS[index].buildInfo.dstAccelerationStructure = buildAS[index].accelStructure;
         buildAS[index].buildInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR;
@@ -1673,25 +1670,23 @@ void VulkanRenderer::CMDCreateBLAS(std::vector<uint32_t> indices, std::vector<Bu
 
         if (queryPool) {
             VkCommandBuffer cmdBuff1 = beginSingleTimeCommands();
-            vkCmdWriteAccelerationStructuresPropertiesKHR(cmdBuff1, 1, &buildAS[index].accelStructure, VK_QUERY_TYPE_ACCELERATION_STRUCTURE_COMPACTED_SIZE_KHR, queryPool, queryCount++);
+            vkCmdWriteAccelerationStructuresPropertiesKHR(cmdBuff1, 1, &buildAS[index].buildInfo.dstAccelerationStructure, VK_QUERY_TYPE_ACCELERATION_STRUCTURE_COMPACTED_SIZE_KHR, queryPool, queryCount++);
             endSingleTimeCommands(cmdBuff1);
         }
     }
 }
- 
 
-void VulkanRenderer::CMDCompactBLAS(std::vector<uint32_t> indices, std::vector<BuildAccelerationStructure> buildAS, VkQueryPool queryPool) {
+
+void VulkanRenderer::CMDCompactBLAS(std::vector<uint32_t> indices) {
     uint32_t queryCount = 0;
 
     std::vector<VkDeviceSize> compactSizes(static_cast<uint32_t>(indices.size()));
-    VkResult res = vkGetQueryPoolResults(device, queryPool, 0, (uint32_t)compactSizes.size(), compactSizes.size() * sizeof(VkDeviceSize), compactSizes.data(), sizeof(VkDeviceSize), VK_QUERY_RESULT_WAIT_BIT | VK_QUERY_RESULT_64_BIT);
-    if (res != VK_SUCCESS) {
-        std::_Xruntime_error("Failed to get query pool results");
-    }
+    vkGetQueryPoolResults(device, queryPool, 0, (uint32_t)compactSizes.size(), compactSizes.size() * sizeof(VkDeviceSize), compactSizes.data(), sizeof(VkDeviceSize), VK_QUERY_RESULT_WAIT_BIT);
 
     for (auto index : indices) {
-        buildAS[index].cleanupAS(device);
-        buildAS[index].sizeInfo.accelerationStructureSize = compactSizes[queryCount];
+        buildAS[index].prevStructure = buildAS[index].buildInfo.dstAccelerationStructure;
+        buildAS[index].accelStructure = VK_NULL_HANDLE;
+        buildAS[index].sizeInfo.accelerationStructureSize = compactSizes[queryCount++];
 
         // Creating a compact version of the AS
         VkAccelerationStructureCreateInfoKHR accelStructureCInfo{};
@@ -1699,22 +1694,21 @@ void VulkanRenderer::CMDCompactBLAS(std::vector<uint32_t> indices, std::vector<B
         accelStructureCInfo.size = buildAS[index].sizeInfo.accelerationStructureSize;
         accelStructureCInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
 
-        VkBuffer tempBuffer;
-        VkDeviceMemory tempBufferMemory;
-        createBuffer(accelStructureCInfo.size, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, tempBuffer, tempBufferMemory);
+        createBuffer(accelStructureCInfo.size, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, tempBuffer2, tempBufferMemory2);
 
         accelStructureCInfo.buffer = tempBuffer;
         vkCreateAccelerationStructureKHR(device, &accelStructureCInfo, nullptr, &buildAS[index].accelStructure);
-        vkDestroyBuffer(device, tempBuffer, nullptr);
 
         VkCopyAccelerationStructureInfoKHR copyInfo{};
         copyInfo.sType = VK_STRUCTURE_TYPE_COPY_ACCELERATION_STRUCTURE_INFO_KHR;
         copyInfo.src = buildAS[index].buildInfo.dstAccelerationStructure;
         copyInfo.dst = buildAS[index].accelStructure;
         copyInfo.mode = VK_COPY_ACCELERATION_STRUCTURE_MODE_COMPACT_KHR;
-        VkCommandBuffer cmdBuffer = beginSingleTimeCommands();
-        vkCmdCopyAccelerationStructureKHR(cmdBuffer, &copyInfo);
-        endSingleTimeCommands(cmdBuffer);
+        VkCommandBuffer cmdBuffer1 = beginSingleTimeCommands();
+        vkCmdCopyAccelerationStructureKHR(cmdBuffer1, &copyInfo);
+        endSingleTimeCommands(cmdBuffer1);
+        vkDestroyBuffer(device, tempBuffer, nullptr);
+        vkDestroyBuffer(device, tempBuffer2, nullptr);
     }
 }
 
@@ -1724,7 +1718,7 @@ void VulkanRenderer::buildBlas(const std::vector<BLASInput>& input, VkBuildAccel
     uint32_t numCompactions{ 0 };
     VkDeviceSize maxScratchSize{ 0 };
 
-    std::vector<BuildAccelerationStructure> buildAS(numBlas);
+    buildAS.resize(numBlas);
     for (int i = 0; i < numBlas; i++) {
         buildAS[i].sizeInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
         buildAS[i].buildInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
@@ -1756,9 +1750,7 @@ void VulkanRenderer::buildBlas(const std::vector<BLASInput>& input, VkBuildAccel
     scratchBufferInfo.buffer = scratchBuffer;
     VkDeviceAddress scratchBufferAddress = vkGetBufferDeviceAddressKHR(device, &scratchBufferInfo);
 
-    VkQueryPool queryPool{};
     if (numCompactions > 0) {
-        numCompactions = numBlas;
         VkQueryPoolCreateInfo queryPoolCInfo{};
         queryPoolCInfo.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
         queryPoolCInfo.queryCount = numCompactions;
@@ -1767,7 +1759,6 @@ void VulkanRenderer::buildBlas(const std::vector<BLASInput>& input, VkBuildAccel
         vkDeviceWaitIdle(device);
     }
 
-    vkResetQueryPoolEXT(device, queryPool, 0, numCompactions);
     vkDeviceWaitIdle(device);
 
     std::vector<uint32_t> indices;
@@ -1778,10 +1769,10 @@ void VulkanRenderer::buildBlas(const std::vector<BLASInput>& input, VkBuildAccel
         indices.push_back(i);
         batchSize += buildAS[i].sizeInfo.accelerationStructureSize;
         if (batchSize >= batchLimit || i == numBlas - 1) {
-            CMDCreateBLAS(indices, buildAS, scratchBufferAddress, queryPool);
+            CMDCreateBLAS(indices, scratchBufferAddress);
 
             if (queryPool) {
-                CMDCompactBLAS(indices, buildAS, queryPool);
+                CMDCompactBLAS(indices);
             }
 
             batchSize = 0;

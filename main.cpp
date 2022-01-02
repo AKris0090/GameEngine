@@ -14,6 +14,10 @@ const int MAX_FRAMES_IN_FLIGHT = 2;
 void cleanup() {
     vkR.cleanupSWChain();
 
+    for (auto& as : vkR.buildAS) {
+        as.cleanupAS(vkR.device);
+    }
+
     vkDestroyImageView(vkR.device, vkR.depthImageView, nullptr);
     vkDestroyImage(vkR.device, vkR.depthImage, nullptr);
     vkFreeMemory(vkR.device, vkR.depthImageMemory, nullptr);
@@ -149,7 +153,7 @@ void initVulkan() {
 
     vkR.createSemaphores(MAX_FRAMES_IN_FLIGHT);
 
-    //vkR.createBottomLevelAS();
+    vkR.createBottomLevelAS();
 }
 
 int main(int argc, char** arcgv) {
