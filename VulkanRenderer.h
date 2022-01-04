@@ -121,6 +121,10 @@ public:
 	VkDeviceMemory tempBufferMemory;
 	VkBuffer tempBuffer2;
 	VkDeviceMemory tempBufferMemory2;
+	VkBuffer tempBuffer3;
+	VkDeviceMemory tempBufferMemory3;
+
+	VkAccelerationStructureKHR topLevelAccelStructure;
 
 	struct UniformBufferObject {
 		alignas(16) glm::mat4 model;
@@ -158,6 +162,15 @@ public:
 			return attributeDescriptions;
 		}
 	};
+
+	struct OBJInstance {
+		uint32_t index = 0;
+		uint32_t textureOffset = 0;
+		glm::mat4 transform{ 0 };
+		glm::mat4 transformIT{ 0 };
+	};
+	
+	std::vector<OBJInstance> instances;
 
 	struct Model {
 		uint32_t totalIndices;
@@ -236,7 +249,7 @@ public:
 	// Create a list of command buffer objects
 	void createCommandBuffers();
 
-	void loadModel();
+	void loadModel(glm::mat4 transform);
 	void createVertexBuffer();
 	void createIndexBuffer();
 	void createUniformBuffers();
@@ -294,6 +307,9 @@ public:
 	void buildBlas(const std::vector<BLASInput>& input, VkBuildAccelerationStructureFlagsKHR flags);
 	void CMDCreateBLAS(std::vector<uint32_t> indices, VkDeviceAddress scratchBufferAddress);
 	void CMDCompactBLAS(std::vector<uint32_t> indices);
+	void createTopLevelAS();
+	void buildTlas(const std::vector<VkAccelerationStructureInstanceKHR>& instances, VkBuildAccelerationStructureFlagsKHR flags, bool update);
+	void CMDCreateTLAS(uint32_t numInstances, VkDeviceAddress instBufferAddress, VkBuffer scratchBuffer, VkBuildAccelerationStructureFlagsKHR flags, bool update, bool motion);
 
 
 	// Queue family struct

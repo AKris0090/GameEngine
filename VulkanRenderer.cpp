@@ -11,6 +11,7 @@
 #include <iostream>
 #include <fstream>
 #include <array>
+#include <glm.hpp>
 #include <unordered_map>
 
 #define TINYOBJLOADER_IMPLEMENTATION
@@ -918,11 +919,17 @@ MODEL LOADER
 */
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void VulkanRenderer::loadModel() {
+void VulkanRenderer::loadModel(glm::mat4 transform) {
     tinyobj::attrib_t attrib;
     std::vector<tinyobj::shape_t> shapes;
     std::vector<tinyobj::material_t> materials;
     std::string warn, err;
+
+    OBJInstance instance;
+    instance.index = static_cast<uint32_t>(loadedModels.size());
+    instance.transform = transform;
+    instance.transformIT = glm::transpose(glm::inverse(transform));
+    instance.textureOffset = static_cast<uint32_t>(materials.size());
 
     loadedModels.resize(static_cast<uint32_t>(loadedModels.size()) + 1);
 
@@ -951,6 +958,8 @@ void VulkanRenderer::loadModel() {
             loadedModels[0].indices.push_back(static_cast<uint32_t>(loadedModels[0].indices.size()));
         }
     }
+
+    instances.emplace_back(instance);
 
     numModels += 1;
 }
@@ -1796,4 +1805,110 @@ void VulkanRenderer::createBottomLevelAS() {
     }
 
     buildBlas(BLASInputList, VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR);
+}
+
+void VulkanRenderer::CMDCreateTLAS(uint32_t numInstances, VkDeviceAddress instBufferAddress, VkBuffer scratchBuffer, VkBuildAccelerationStructureFlagsKHR flags, bool update, bool motion) {
+    VkAccelerationStructureGeometryInstancesDataKHR vulkanInstances{};
+    vulkanInstances.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;
+    vulkanInstances.data.deviceAddress = instBufferAddress;
+
+    VkAccelerationStructureGeometryKHR topAccelStructGeo{};
+    topAccelStructGeo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
+    topAccelStructGeo.geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR;
+    topAccelStructGeo.geometry.instances = vulkanInstances;
+
+    VkAccelerationStructureBuildGeometryInfoKHR topAccelStructBuildInfo{};
+    topAccelStructBuildInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
+    topAccelStructBuildInfo.flags = flags;
+    topAccelStructBuildInfo.geometryCount = 1;
+    topAccelStructBuildInfo.pGeometries = &topAccelStructGeo;
+    topAccelStructBuildInfo.mode = update ? VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR : VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+    topAccelStructBuildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
+    topAccelStructBuildInfo.srcAccelerationStructure = VK_NULL_HANDLE;
+
+    VkAccelerationStructureBuildSizesInfoKHR topAccelStructSizeInfo{};
+    topAccelStructSizeInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
+    vkGetAccelerationStructureBuildSizesKHR(device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &topAccelStructBuildInfo, &numInstances, &topAccelStructSizeInfo);
+
+    VkAccelerationStructureCreateInfoKHR topAccelStructCInfo{};
+    topAccelStructCInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
+    topAccelStructCInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
+    topAccelStructCInfo.size = topAccelStructSizeInfo.accelerationStructureSize;
+
+    createBuffer(topAccelStructCInfo.size, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, tempBuffer3, tempBufferMemory3);
+    topAccelStructCInfo.buffer = tempBuffer3;
+
+    VkResult res = vkCreateAccelerationStructureKHR(device, &topAccelStructCInfo, nullptr, &topLevelAccelStructure);
+
+    VkDeviceMemory scratchBufferMemory;
+    createBuffer(topAccelStructSizeInfo.buildScratchSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, scratchBuffer, scratchBufferMemory);
+    VkBufferDeviceAddressInfo scratchBufferInfo{};
+    scratchBufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+    scratchBufferInfo.buffer = scratchBuffer;
+    VkDeviceAddress scratchBufferAddress = vkGetBufferDeviceAddress(device, &scratchBufferInfo);
+
+    topAccelStructBuildInfo.srcAccelerationStructure = VK_NULL_HANDLE;
+    topAccelStructBuildInfo.dstAccelerationStructure = topLevelAccelStructure;
+    topAccelStructBuildInfo.scratchData.deviceAddress = scratchBufferAddress;
+
+    VkAccelerationStructureBuildRangeInfoKHR TLASOffsetInfo{};
+    TLASOffsetInfo.firstVertex = numInstances;
+    TLASOffsetInfo.primitiveCount, TLASOffsetInfo.primitiveOffset, TLASOffsetInfo.transformOffset = 0;
+    const VkAccelerationStructureBuildRangeInfoKHR* pTLASBuildOffsetInfo = &TLASOffsetInfo;
+
+    VkCommandBuffer cmdBuff1 = beginSingleTimeCommands();
+    vkCmdBuildAccelerationStructuresKHR(cmdBuff1, 1, &topAccelStructBuildInfo, &pTLASBuildOffsetInfo);
+    endSingleTimeCommands(cmdBuff1);
+}
+
+void VulkanRenderer::buildTlas(const std::vector<VkAccelerationStructureInstanceKHR>& TLASInstances, VkBuildAccelerationStructureFlagsKHR flags, bool update = false) {
+    uint32_t numInstances = static_cast<uint32_t>(instances.size());
+
+    VkBuffer instancesBuffer;
+    VkDeviceMemory instancesBufferMemory;
+    createBuffer(TLASInstances.size(), VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, instancesBuffer, instancesBufferMemory);
+    VkBufferDeviceAddressInfo bufferInfo{};
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+    bufferInfo.buffer = instancesBuffer;
+    VkDeviceAddress instBufferAddress = vkGetBufferDeviceAddress(device, &bufferInfo);
+
+    VkMemoryBarrier barrier{};
+    barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    barrier.dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;
+    VkCommandBuffer cmdBuff = beginSingleTimeCommands();
+    vkCmdPipelineBarrier(cmdBuff, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 0, 1, &barrier, 0, nullptr, 0, nullptr);
+    endSingleTimeCommands(cmdBuff);
+
+    VkBuffer scratchBuffer = VK_NULL_HANDLE;
+    bool motion = false;
+    CMDCreateTLAS(numInstances, instBufferAddress, scratchBuffer, flags, update, motion);
+    vkDestroyBuffer(device, scratchBuffer, nullptr);
+    vkDestroyBuffer(device, instancesBuffer, nullptr);
+}
+
+void VulkanRenderer::createTopLevelAS() {
+    std::vector<VkAccelerationStructureInstanceKHR> TLAS;
+    TLAS.reserve(instances.size());
+    for (const OBJInstance& inst : instances) {
+        VkAccelerationStructureInstanceKHR rayInstance{};
+
+        glm::mat4 temporaryMatrix = glm::transpose(inst.transform);
+        VkTransformMatrixKHR otherMatrix;
+        memcpy(&otherMatrix, &temporaryMatrix, sizeof(VkTransformMatrixKHR));
+
+        rayInstance.transform = otherMatrix;
+        rayInstance.instanceCustomIndex = inst.index;
+
+        VkAccelerationStructureDeviceAddressInfoKHR BLASAddressInfo {};
+        BLASAddressInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR;
+        BLASAddressInfo.accelerationStructure = buildAS[inst.index].accelStructure;
+
+        rayInstance.accelerationStructureReference = vkGetAccelerationStructureDeviceAddressKHR(device, &BLASAddressInfo);
+        rayInstance.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
+        rayInstance.mask = 0xFF;
+        rayInstance.instanceShaderBindingTableRecordOffset = 0;
+        TLAS.emplace_back(rayInstance);
+    }
+    buildTlas(TLAS, VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR);
 }

@@ -1,7 +1,10 @@
 #include "SDL.h"
 #include "Display.h"
 #include "VulkanRenderer.h"
+#include "VulkanRaytracing.h"
 #include <vector>
+#include <glm.hpp>
+#include "glm-0.9.6.3/gtc/matrix_transform.hpp"
 #include <cstring>
 
 VulkanRenderer vkR;
@@ -95,6 +98,8 @@ void executeVulkanSDLLoop(Display d) {
 }
 
 void initVulkan() {
+    glm::mat4 translationMatrix{ 1.0f };
+
     volkInitialize();
 
     vkR.instance = vkR.createVulkanInstance(displayWindow, "Vulkan Game Engine");
@@ -135,7 +140,7 @@ void initVulkan() {
 
     vkR.createTextureImageSampler();
 
-    vkR.loadModel();
+    vkR.loadModel(translationMatrix);
 
     vkR.createVertexBuffer();
 
@@ -154,6 +159,8 @@ void initVulkan() {
     vkR.createSemaphores(MAX_FRAMES_IN_FLIGHT);
 
     vkR.createBottomLevelAS();
+
+    vkR.createTopLevelAS();
 }
 
 int main(int argc, char** arcgv) {
