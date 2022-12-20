@@ -1,25 +1,32 @@
 #include "SDL.h"
 #include "Display.h"
 #include "VulkanRenderer.h"
-#include "VulkanRaytracing.h"
 #include <vector>
-#include <glm.hpp>
+#include "glm-0.9.6.3/glm.hpp"
 #include "glm-0.9.6.3/gtc/matrix_transform.hpp"
 #include <cstring>
+#include "RayTrace.h"
 
 VulkanRenderer vkR;
 SDL_Window* displayWindow;
+bool yesTexture = true;
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
 #define VOLK_IMPLEMENTATION
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#define GLM_FORCE_RADIANS
+#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
+#include "volk-master/volk.h"
 #include <volk.h>
 
 void cleanup() {
     vkR.cleanupSWChain();
 
-    for (auto& as : vkR.buildAS) {
-        as.cleanupAS(vkR.device);
-    }
+    //for (auto& as : vkR.buildAS) {
+    //    as.cleanupAS(vkR.device);
+    //}
+
+    vkDestroyCommandPool(vkR.device, vkR.commandPool, nullptr);
 
     vkDestroyImageView(vkR.device, vkR.depthImageView, nullptr);
     vkDestroyImage(vkR.device, vkR.depthImage, nullptr);
@@ -134,11 +141,14 @@ void initVulkan() {
 
     vkR.createFrameBuffer();
 
-    vkR.createTextureImage();
+    if (yesTexture) {
 
-    vkR.createTextureImageView();
+        vkR.createTextureImage();
 
-    vkR.createTextureImageSampler();
+        vkR.createTextureImageView();
+
+        vkR.createTextureImageSampler();
+    }
 
     vkR.loadModel(translationMatrix);
 
@@ -152,15 +162,85 @@ void initVulkan() {
 
     vkR.createDescriptorSets();
 
-    vkR.initializeRT();
-
     vkR.createCommandBuffers();
 
     vkR.createSemaphores(MAX_FRAMES_IN_FLIGHT);
+}
 
-    vkR.createBottomLevelAS();
+void initRayTrace() {
+    RayTrace rt;
 
-    vkR.createTopLevelAS();
+    glm::mat4 translationMatrix{ 1.0f };
+
+    RayTrace::PushConstantRay m_pcRay{};
+
+    volkInitialize();
+
+    rt.instance = rt.createVulkanInstance(displayWindow, "Ray Tracing Game Engine");
+
+    volkLoadInstance(rt.instance);
+
+    if (rt.enableValLayers) {
+        rt.setupDebugMessenger(rt.instance, rt.debugMessenger);
+    }
+
+    rt.createSurface(displayWindow);
+
+    rt.pickPhysicalDevice();
+
+    rt.createLogicalDevice();
+
+    volkLoadDevice(rt.device);
+
+    rt.createCommandPool();
+
+    rt.createSWChain(displayWindow);
+
+    rt.loadModel(translationMatrix);
+
+    rt.createVertexBuffer();
+
+    rt.createIndexBuffer();
+
+    rt.createUniformBuffers();
+
+    rt.createBottomLevelAS();
+    
+    rt.createTopLevelAS();
+
+    rt.createImageViews();
+
+    rt.createStorageImage();
+
+    rt.createTextureImage();
+
+    rt.createTextureImageView();
+
+    rt.createTextureImageSampler();
+
+    rt.createRenderPass();
+
+    rt.createDescriptorPool();
+
+    rt.createDescriptorSetLayout();
+
+    rt.createRTDescriptorSet();
+
+    rt.createRtPipeline();
+
+    rt.createDepthResources();
+
+    rt.createFrameBuffer();
+
+    rt.createTextureImage();
+
+    rt.createTextureImageView();
+
+    rt.createTextureImageSampler();
+
+    rt.createCommandBuffers();
+
+    rt.createSemaphores(MAX_FRAMES_IN_FLIGHT);
 }
 
 int main(int argc, char** arcgv) {
@@ -168,7 +248,7 @@ int main(int argc, char** arcgv) {
     Display d;
     displayWindow = d.initDisplay("Vulkan Game Engine");
 
-    initVulkan();
+    initRayTrace();
 
     executeVulkanSDLLoop(d);
 

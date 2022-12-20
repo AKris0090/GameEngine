@@ -20,10 +20,6 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
-#define GLM_FORCE_RADIANS
-#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
-#define GLM_FORCE_DEPTH_ZERO_TO_ONE
-
 #ifdef NDEBUG
 const bool enableValLayers = false;
 #else
@@ -43,7 +39,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
 }
 
 // Create the debug messenger using createInfo struct
-VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger) {
+VkResult VulkanRenderer::CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger) {
     auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
     if (func != nullptr) {
         return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
@@ -54,7 +50,7 @@ VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMes
 }
 
 // Fill the debug messenger with information to call back
-void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo) {
+void VulkanRenderer::populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo) {
     createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
     createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
@@ -609,7 +605,7 @@ void VulkanRenderer::createDescriptorSetLayout() {
     UBOLayoutBinding.binding = 0;
     UBOLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     UBOLayoutBinding.descriptorCount = 1;
-    UBOLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    UBOLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR;
     UBOLayoutBinding.pImmutableSamplers = nullptr;
 
     VkDescriptorSetLayoutBinding samplerLayoutBinding{};
@@ -617,9 +613,23 @@ void VulkanRenderer::createDescriptorSetLayout() {
     samplerLayoutBinding.descriptorCount = 1;
     samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     samplerLayoutBinding.pImmutableSamplers = nullptr;
-    samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
 
-    std::array<VkDescriptorSetLayoutBinding, 2> bindings = { UBOLayoutBinding, samplerLayoutBinding };
+    VkDescriptorSetLayoutBinding rayTraceBinding{};
+    rayTraceBinding.binding = 2;
+    rayTraceBinding.descriptorCount = 1;
+    rayTraceBinding.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+    rayTraceBinding.pImmutableSamplers = nullptr;
+    rayTraceBinding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+
+    VkDescriptorSetLayoutBinding outImageBinding{};
+    outImageBinding.binding = 3;
+    outImageBinding.descriptorCount = 1;
+    outImageBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    outImageBinding.pImmutableSamplers = nullptr;
+    outImageBinding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT;
+
+    std::array<VkDescriptorSetLayoutBinding, 4> bindings = { UBOLayoutBinding, samplerLayoutBinding, rayTraceBinding, outImageBinding};
     VkDescriptorSetLayoutCreateInfo layoutCInfo{};
     layoutCInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     layoutCInfo.bindingCount = static_cast<uint32_t>(bindings.size());
@@ -1076,7 +1086,7 @@ void VulkanRenderer::createVertexBuffer() {
     memcpy(data, loadedModels[0].vertices.data(), (size_t)bufferSize);
     vkUnmapMemory(device, stagingBufferMemory);
 
-    createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferMemory);
+    createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferMemory);
     copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
 
     vkDestroyBuffer(device, stagingBuffer, nullptr);
@@ -1095,7 +1105,7 @@ void VulkanRenderer::createIndexBuffer() {
     memcpy(data, loadedModels[0].indices.data(), (size_t)bufferSize);
     vkUnmapMemory(device, stagingBufferMemory);
 
-    createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer, indexBufferMemory);
+    createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer, indexBufferMemory);
 
     copyBuffer(stagingBuffer, indexBuffer, bufferSize);
 
@@ -1133,6 +1143,8 @@ void VulkanRenderer::createDescriptorPool() {
 }
 
 void VulkanRenderer::createDescriptorSets() {
+    std::vector<VkDescriptorSetLayoutBinding> bindings;
+
     std::vector<VkDescriptorSetLayout> layouts(SWChainImages.size(), descriptorSetLayout);
     VkDescriptorSetAllocateInfo allocateInfo{};
     allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -1145,6 +1157,14 @@ void VulkanRenderer::createDescriptorSets() {
         std::_Xruntime_error("Failed to allocate descriptor sets!");
     }
 
+    VkAccelerationStructureKHR TLAStructure = topLevelAccelStructure;
+    VkWriteDescriptorSetAccelerationStructureKHR descriptorSetAccelInfo{};
+    descriptorSetAccelInfo.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
+    descriptorSetAccelInfo.accelerationStructureCount = 1;
+    descriptorSetAccelInfo.pAccelerationStructures = &TLAStructure;
+    VkDescriptorImageInfo imageInfo{ {}, SWChainImageViews[0], VK_IMAGE_LAYOUT_GENERAL }; //Careful with this
+    std::vector<VkWriteDescriptorSet> writeDS;
+        
     for (size_t i = 0; i < SWChainImages.size(); i++) {
         VkDescriptorBufferInfo descriptorBufferInfo{};
         descriptorBufferInfo.buffer = uniformBuffers[i];
@@ -1166,13 +1186,15 @@ void VulkanRenderer::createDescriptorSets() {
         descriptorWriteSets[0].descriptorCount = 1;
         descriptorWriteSets[0].pBufferInfo = &descriptorBufferInfo;
 
-        descriptorWriteSets[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptorWriteSets[1].dstSet = descriptorSets[i];
-        descriptorWriteSets[1].dstBinding = 1;
-        descriptorWriteSets[1].dstArrayElement = 0;
-        descriptorWriteSets[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        descriptorWriteSets[1].descriptorCount = 1;
-        descriptorWriteSets[1].pImageInfo = &imageInfo;
+        if (yesTexture) {
+            descriptorWriteSets[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWriteSets[1].dstSet = descriptorSets[i];
+            descriptorWriteSets[1].dstBinding = 1;
+            descriptorWriteSets[1].dstArrayElement = 0;
+            descriptorWriteSets[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            descriptorWriteSets[1].descriptorCount = 1;
+            descriptorWriteSets[1].pImageInfo = &imageInfo;
+        }
 
         vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWriteSets.size()), descriptorWriteSets.data(), 0, nullptr);
     }
@@ -1184,7 +1206,7 @@ CREATE THE DEPTH RESOURCES
 */
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-bool hasStencilComponent(VkFormat format) {
+bool VulkanRenderer::hasStencilComponent(VkFormat format) {
     return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
 }
 
@@ -1580,335 +1602,4 @@ void VulkanRenderer::recreateSwapChain(SDL_Window* window) {
     createDescriptorPool();
     createDescriptorSets();
     createCommandBuffers();
-}
-
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/*
-RAYTRACING METHODS
-*/
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-void VulkanRenderer::initializeRT() {
-    VkPhysicalDeviceProperties2 deviceProps2{};
-    deviceProps2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
-    deviceProps2.pNext = &physicalDeviceRTProperties;
-    vkGetPhysicalDeviceProperties2(GPU, &deviceProps2);
-}
-
-VkDeviceAddress VulkanRenderer::getDeviceAddress(VkBuffer buffer) {
-    VkBufferDeviceAddressInfo addressInfo;
-    addressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
-    addressInfo.pNext = nullptr;
-    addressInfo.buffer = buffer;
-    return vkGetBufferDeviceAddressKHR(device, &addressInfo);
-}
-
-VulkanRenderer::BLASInput VulkanRenderer::BLASObjectToGeometry(Model model) {
-    VkDeviceAddress vertexBufferAddress = getDeviceAddress(vertexBuffer);
-    VkDeviceAddress indexBufferAddress = getDeviceAddress(indexBuffer);
-
-    // Assuming trianlges, divide indices by 3
-    uint32_t maxNumPrimitives = model.totalIndices / 3;
-
-    VkAccelerationStructureGeometryTrianglesDataKHR triangles{};
-    triangles.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
-    triangles.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
-    triangles.vertexData.deviceAddress = vertexBufferAddress;
-    triangles.vertexStride = sizeof(Vertex);
-
-    triangles.indexType = VK_INDEX_TYPE_UINT32;
-    triangles.indexData.deviceAddress = indexBufferAddress;
-    triangles.maxVertex = model.totalVertices;
-
-    VkAccelerationStructureGeometryKHR makeGeometry{};
-    makeGeometry.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
-    makeGeometry.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
-    makeGeometry.flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
-    makeGeometry.geometry.triangles = triangles;
-
-    VkAccelerationStructureBuildRangeInfoKHR offset;
-    offset.firstVertex = 0;
-    offset.primitiveCount = maxNumPrimitives;
-    offset.primitiveOffset = 0;
-    offset.transformOffset = 0;
-
-    BLASInput input;
-    input.geoData.emplace_back(makeGeometry);
-    input.offsetData.emplace_back(offset);
-
-    return input;
-}
-
-bool hasFlag(VkBuildAccelerationStructureFlagsKHR flags, VkBuildAccelerationStructureFlagBitsKHR bitFlag) {
-    return (flags && bitFlag != 0);
-}
-
-void VulkanRenderer::CMDCreateBLAS(std::vector<uint32_t> indices, VkDeviceAddress scratchBufferAddress) {
-    if (queryPool) {
-        vkResetQueryPool(device, queryPool, 0, static_cast<uint32_t>(indices.size()));
-    }
-    uint32_t queryCount = 0;
-
-    for (const auto& index : indices) {
-        VkAccelerationStructureCreateInfoKHR accelStructureCInfo{};
-        accelStructureCInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
-        accelStructureCInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
-        accelStructureCInfo.size = buildAS[index].sizeInfo.accelerationStructureSize;
-
-        createBuffer(accelStructureCInfo.size, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, tempBuffer, tempBufferMemory);
-
-        accelStructureCInfo.buffer = tempBuffer;
-        vkCreateAccelerationStructureKHR(device, &accelStructureCInfo, nullptr, &buildAS[index].accelStructure);
-
-        buildAS[index].buildInfo.dstAccelerationStructure = buildAS[index].accelStructure;
-        buildAS[index].buildInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR;
-        buildAS[index].buildInfo.scratchData.deviceAddress = scratchBufferAddress;
-
-        VkCommandBuffer cmdBuff = beginSingleTimeCommands();
-        vkCmdBuildAccelerationStructuresKHR(cmdBuff, 1, &buildAS[index].buildInfo, &buildAS[index].rangeInfo);
-        endSingleTimeCommands(cmdBuff);
-
-        VkMemoryBarrier barrier{};
-        barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-        barrier.srcAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;
-        barrier.dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR;
-        VkCommandBuffer cmdBuff2 = beginSingleTimeCommands();
-        vkCmdPipelineBarrier(cmdBuff2, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 0, 1, &barrier, 0, nullptr, 0, nullptr);
-        endSingleTimeCommands(cmdBuff2);
-
-        if (queryPool) {
-            VkCommandBuffer cmdBuff1 = beginSingleTimeCommands();
-            vkCmdWriteAccelerationStructuresPropertiesKHR(cmdBuff1, 1, &buildAS[index].buildInfo.dstAccelerationStructure, VK_QUERY_TYPE_ACCELERATION_STRUCTURE_COMPACTED_SIZE_KHR, queryPool, queryCount++);
-            endSingleTimeCommands(cmdBuff1);
-        }
-    }
-}
-
-
-void VulkanRenderer::CMDCompactBLAS(std::vector<uint32_t> indices) {
-    uint32_t queryCount = 0;
-
-    std::vector<VkDeviceSize> compactSizes(static_cast<uint32_t>(indices.size()));
-    vkGetQueryPoolResults(device, queryPool, 0, (uint32_t)compactSizes.size(), compactSizes.size() * sizeof(VkDeviceSize), compactSizes.data(), sizeof(VkDeviceSize), VK_QUERY_RESULT_WAIT_BIT);
-
-    for (auto index : indices) {
-        buildAS[index].prevStructure = buildAS[index].buildInfo.dstAccelerationStructure;
-        buildAS[index].accelStructure = VK_NULL_HANDLE;
-        buildAS[index].sizeInfo.accelerationStructureSize = compactSizes[queryCount++];
-
-        // Creating a compact version of the AS
-        VkAccelerationStructureCreateInfoKHR accelStructureCInfo{};
-        accelStructureCInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
-        accelStructureCInfo.size = buildAS[index].sizeInfo.accelerationStructureSize;
-        accelStructureCInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
-
-        createBuffer(accelStructureCInfo.size, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, tempBuffer2, tempBufferMemory2);
-
-        accelStructureCInfo.buffer = tempBuffer;
-        vkCreateAccelerationStructureKHR(device, &accelStructureCInfo, nullptr, &buildAS[index].accelStructure);
-
-        VkCopyAccelerationStructureInfoKHR copyInfo{};
-        copyInfo.sType = VK_STRUCTURE_TYPE_COPY_ACCELERATION_STRUCTURE_INFO_KHR;
-        copyInfo.src = buildAS[index].buildInfo.dstAccelerationStructure;
-        copyInfo.dst = buildAS[index].accelStructure;
-        copyInfo.mode = VK_COPY_ACCELERATION_STRUCTURE_MODE_COMPACT_KHR;
-        VkCommandBuffer cmdBuffer1 = beginSingleTimeCommands();
-        vkCmdCopyAccelerationStructureKHR(cmdBuffer1, &copyInfo);
-        endSingleTimeCommands(cmdBuffer1);
-        vkDestroyBuffer(device, tempBuffer, nullptr);
-        vkDestroyBuffer(device, tempBuffer2, nullptr);
-    }
-}
-
-void VulkanRenderer::buildBlas(const std::vector<BLASInput>& input, VkBuildAccelerationStructureFlagsKHR flags) {
-    uint32_t numBlas = static_cast<uint32_t>(input.size());
-    VkDeviceSize asTotalSize{ 0 };
-    uint32_t numCompactions{ 0 };
-    VkDeviceSize maxScratchSize{ 0 };
-
-    buildAS.resize(numBlas);
-    for (int i = 0; i < numBlas; i++) {
-        buildAS[i].sizeInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
-        buildAS[i].buildInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
-        buildAS[i].buildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
-        buildAS[i].buildInfo.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
-        buildAS[i].buildInfo.flags = input[i].flags | flags;
-        buildAS[i].buildInfo.geometryCount = static_cast<uint32_t>(input[i].geoData.size());
-        buildAS[i].buildInfo.pGeometries = input[i].geoData.data();
-
-        buildAS[i].rangeInfo = input[i].offsetData.data();
-
-        std::vector<uint32_t> maxPrimitiveCount(input[i].offsetData.size());
-        for (auto j = 0; j < input[i].offsetData.size(); j++) {
-            maxPrimitiveCount[j] = input[i].offsetData[j].primitiveCount;
-            vkGetAccelerationStructureBuildSizesKHR(device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &buildAS[i].buildInfo, maxPrimitiveCount.data(), &buildAS[i].sizeInfo);
-        }
-
-        asTotalSize += buildAS[i].sizeInfo.accelerationStructureSize;
-        maxScratchSize = std::max(maxScratchSize, buildAS[i].sizeInfo.buildScratchSize);
-        numCompactions += hasFlag(buildAS[i].buildInfo.flags, VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR);
-    }
-
-    VkBuffer scratchBuffer;
-    VkDeviceMemory scratchBufferMemory;
-
-    createBuffer(maxScratchSize, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, scratchBuffer, scratchBufferMemory);
-    VkBufferDeviceAddressInfo scratchBufferInfo{};
-    scratchBufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
-    scratchBufferInfo.buffer = scratchBuffer;
-    VkDeviceAddress scratchBufferAddress = vkGetBufferDeviceAddressKHR(device, &scratchBufferInfo);
-
-    if (numCompactions > 0) {
-        VkQueryPoolCreateInfo queryPoolCInfo{};
-        queryPoolCInfo.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
-        queryPoolCInfo.queryCount = numCompactions;
-        queryPoolCInfo.queryType = VK_QUERY_TYPE_ACCELERATION_STRUCTURE_COMPACTED_SIZE_KHR;
-        vkCreateQueryPool(device, &queryPoolCInfo, nullptr, &queryPool);
-        vkDeviceWaitIdle(device);
-    }
-
-    vkDeviceWaitIdle(device);
-
-    std::vector<uint32_t> indices;
-    VkDeviceSize batchSize{ 0 };
-    VkDeviceSize batchLimit{ 256'000'000 };
-
-    for (int i = 0; i < numBlas; i++) {
-        indices.push_back(i);
-        batchSize += buildAS[i].sizeInfo.accelerationStructureSize;
-        if (batchSize >= batchLimit || i == numBlas - 1) {
-            CMDCreateBLAS(indices, scratchBufferAddress);
-
-            if (queryPool) {
-                CMDCompactBLAS(indices);
-            }
-
-            batchSize = 0;
-            indices.clear();
-        }
-    }
-    for (BuildAccelerationStructure& b : buildAS)
-    {
-        bottomLevelAccelerationStructures.emplace_back(b.accelStructure);
-    }
-
-    vkDestroyQueryPool(device, queryPool, nullptr);
-    vkDestroyBuffer(device, scratchBuffer, nullptr);
-}
-
-void VulkanRenderer::createBottomLevelAS() {
-    std::vector<BLASInput> BLASInputList;
-    BLASInputList.reserve(numModels);
-    for (int i = 0; i < numModels; i++) {
-        BLASInputList.emplace_back(BLASObjectToGeometry(loadedModels[i]));
-    }
-
-    buildBlas(BLASInputList, VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR);
-}
-
-void VulkanRenderer::CMDCreateTLAS(uint32_t numInstances, VkDeviceAddress instBufferAddress, VkBuffer scratchBuffer, VkBuildAccelerationStructureFlagsKHR flags, bool update, bool motion) {
-    VkAccelerationStructureGeometryInstancesDataKHR vulkanInstances{};
-    vulkanInstances.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;
-    vulkanInstances.data.deviceAddress = instBufferAddress;
-
-    VkAccelerationStructureGeometryKHR topAccelStructGeo{};
-    topAccelStructGeo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
-    topAccelStructGeo.geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR;
-    topAccelStructGeo.geometry.instances = vulkanInstances;
-
-    VkAccelerationStructureBuildGeometryInfoKHR topAccelStructBuildInfo{};
-    topAccelStructBuildInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
-    topAccelStructBuildInfo.flags = flags;
-    topAccelStructBuildInfo.geometryCount = 1;
-    topAccelStructBuildInfo.pGeometries = &topAccelStructGeo;
-    topAccelStructBuildInfo.mode = update ? VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR : VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
-    topAccelStructBuildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
-    topAccelStructBuildInfo.srcAccelerationStructure = VK_NULL_HANDLE;
-
-    VkAccelerationStructureBuildSizesInfoKHR topAccelStructSizeInfo{};
-    topAccelStructSizeInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
-    vkGetAccelerationStructureBuildSizesKHR(device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &topAccelStructBuildInfo, &numInstances, &topAccelStructSizeInfo);
-
-    VkAccelerationStructureCreateInfoKHR topAccelStructCInfo{};
-    topAccelStructCInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
-    topAccelStructCInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
-    topAccelStructCInfo.size = topAccelStructSizeInfo.accelerationStructureSize;
-
-    createBuffer(topAccelStructCInfo.size, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, tempBuffer3, tempBufferMemory3);
-    topAccelStructCInfo.buffer = tempBuffer3;
-
-    VkResult res = vkCreateAccelerationStructureKHR(device, &topAccelStructCInfo, nullptr, &topLevelAccelStructure);
-
-    VkDeviceMemory scratchBufferMemory;
-    createBuffer(topAccelStructSizeInfo.buildScratchSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, scratchBuffer, scratchBufferMemory);
-    VkBufferDeviceAddressInfo scratchBufferInfo{};
-    scratchBufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
-    scratchBufferInfo.buffer = scratchBuffer;
-    VkDeviceAddress scratchBufferAddress = vkGetBufferDeviceAddress(device, &scratchBufferInfo);
-
-    topAccelStructBuildInfo.srcAccelerationStructure = VK_NULL_HANDLE;
-    topAccelStructBuildInfo.dstAccelerationStructure = topLevelAccelStructure;
-    topAccelStructBuildInfo.scratchData.deviceAddress = scratchBufferAddress;
-
-    VkAccelerationStructureBuildRangeInfoKHR TLASOffsetInfo{};
-    TLASOffsetInfo.firstVertex = numInstances;
-    TLASOffsetInfo.primitiveCount, TLASOffsetInfo.primitiveOffset, TLASOffsetInfo.transformOffset = 0;
-    const VkAccelerationStructureBuildRangeInfoKHR* pTLASBuildOffsetInfo = &TLASOffsetInfo;
-
-    VkCommandBuffer cmdBuff1 = beginSingleTimeCommands();
-    vkCmdBuildAccelerationStructuresKHR(cmdBuff1, 1, &topAccelStructBuildInfo, &pTLASBuildOffsetInfo);
-    endSingleTimeCommands(cmdBuff1);
-}
-
-void VulkanRenderer::buildTlas(const std::vector<VkAccelerationStructureInstanceKHR>& TLASInstances, VkBuildAccelerationStructureFlagsKHR flags, bool update = false) {
-    uint32_t numInstances = static_cast<uint32_t>(instances.size());
-
-    VkBuffer instancesBuffer;
-    VkDeviceMemory instancesBufferMemory;
-    createBuffer(TLASInstances.size(), VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, instancesBuffer, instancesBufferMemory);
-    VkBufferDeviceAddressInfo bufferInfo{};
-    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
-    bufferInfo.buffer = instancesBuffer;
-    VkDeviceAddress instBufferAddress = vkGetBufferDeviceAddress(device, &bufferInfo);
-
-    VkMemoryBarrier barrier{};
-    barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    barrier.dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;
-    VkCommandBuffer cmdBuff = beginSingleTimeCommands();
-    vkCmdPipelineBarrier(cmdBuff, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 0, 1, &barrier, 0, nullptr, 0, nullptr);
-    endSingleTimeCommands(cmdBuff);
-
-    VkBuffer scratchBuffer = VK_NULL_HANDLE;
-    bool motion = false;
-    CMDCreateTLAS(numInstances, instBufferAddress, scratchBuffer, flags, update, motion);
-    vkDestroyBuffer(device, scratchBuffer, nullptr);
-    vkDestroyBuffer(device, instancesBuffer, nullptr);
-}
-
-void VulkanRenderer::createTopLevelAS() {
-    std::vector<VkAccelerationStructureInstanceKHR> TLAS;
-    TLAS.reserve(instances.size());
-    for (const OBJInstance& inst : instances) {
-        VkAccelerationStructureInstanceKHR rayInstance{};
-
-        glm::mat4 temporaryMatrix = glm::transpose(inst.transform);
-        VkTransformMatrixKHR otherMatrix;
-        memcpy(&otherMatrix, &temporaryMatrix, sizeof(VkTransformMatrixKHR));
-
-        rayInstance.transform = otherMatrix;
-        rayInstance.instanceCustomIndex = inst.index;
-
-        VkAccelerationStructureDeviceAddressInfoKHR BLASAddressInfo {};
-        BLASAddressInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR;
-        BLASAddressInfo.accelerationStructure = buildAS[inst.index].accelStructure;
-
-        rayInstance.accelerationStructureReference = vkGetAccelerationStructureDeviceAddressKHR(device, &BLASAddressInfo);
-        rayInstance.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
-        rayInstance.mask = 0xFF;
-        rayInstance.instanceShaderBindingTableRecordOffset = 0;
-        TLAS.emplace_back(rayInstance);
-    }
-    buildTlas(TLAS, VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR);
 }

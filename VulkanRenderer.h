@@ -8,13 +8,6 @@
 #include <string>
 #include "glm-0.9.6.3/glm.hpp"
 #include <array>
-#include <tiny_obj_loader.h>
-
-#define TINYOBJLOADER_IMPLEMENTATION
-#define STB_IMAGE_IMPLEMENTATION
-#define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#define GLM_FORCE_RADIANS
-#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 
 const std::string MODEL_PATH = "VikingRoom/OBJ.obj";
 const std::string TEXTURE_PATH = "VikingRoom/Material.png";
@@ -24,6 +17,9 @@ class VulkanRenderer {
 
 private:
 public:
+	bool yesTexture = true;
+
+	bool hasStencilComponent(VkFormat format);
 
 	// Extension and validation arrays
 	const std::vector<const char*> validationLayers = {
@@ -62,6 +58,7 @@ public:
 	// Color Blending
 	bool colorBlendEnable = true;
 
+	VkDescriptorSet descriptorSet;
 	VkDescriptorSetLayout descriptorSetLayout;
 
 	// Pipeline Layout for "gloabls" to change shaders
@@ -200,6 +197,9 @@ public:
 	const bool enableValLayers = true;
 #endif
 
+	void populateDebugMessengerCreateInfo (VkDebugUtilsMessengerCreateInfoEXT& createInfo);
+	VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger);
+
 	// Create the vulkan instance
 	VkInstance createVulkanInstance(SDL_Window* window, const char* appName);
 	// Check if the validation layers requested are supported
@@ -273,43 +273,7 @@ public:
 	void transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout);
 	void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
 	void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory);
-
-	// Ray tracing methods and handles
-	struct BLASInput {
-		std::vector<VkAccelerationStructureGeometryKHR> geoData;
-		std::vector<VkAccelerationStructureBuildRangeInfoKHR> offsetData;
-		VkBuildAccelerationStructureFlagsKHR flags{ 0 };
-	};
-
-	struct BuildAccelerationStructure {
-		VkAccelerationStructureBuildGeometryInfoKHR buildInfo;
-		const VkAccelerationStructureBuildRangeInfoKHR* rangeInfo;
-		VkAccelerationStructureBuildSizesInfoKHR sizeInfo;
-		VkAccelerationStructureKHR accelStructure;
-
-		VkAccelerationStructureKHR prevStructure;
-
-		void cleanupAS(VkDevice device) {
-			vkDestroyAccelerationStructureKHR(device, prevStructure, nullptr);
-			vkDestroyAccelerationStructureKHR(device, accelStructure, nullptr);
-		}
-	};
-
-	std::vector<VkAccelerationStructureKHR> bottomLevelAccelerationStructures;
 	uint32_t numModels = 0;
-	std::vector<BuildAccelerationStructure> buildAS;
-
-	VkPhysicalDeviceRayTracingPipelinePropertiesKHR physicalDeviceRTProperties{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR };
-	void initializeRT();
-	VkDeviceAddress getDeviceAddress(VkBuffer buffer);
-	BLASInput BLASObjectToGeometry(Model model);
-	void createBottomLevelAS();
-	void buildBlas(const std::vector<BLASInput>& input, VkBuildAccelerationStructureFlagsKHR flags);
-	void CMDCreateBLAS(std::vector<uint32_t> indices, VkDeviceAddress scratchBufferAddress);
-	void CMDCompactBLAS(std::vector<uint32_t> indices);
-	void createTopLevelAS();
-	void buildTlas(const std::vector<VkAccelerationStructureInstanceKHR>& instances, VkBuildAccelerationStructureFlagsKHR flags, bool update);
-	void CMDCreateTLAS(uint32_t numInstances, VkDeviceAddress instBufferAddress, VkBuffer scratchBuffer, VkBuildAccelerationStructureFlagsKHR flags, bool update, bool motion);
 
 
 	// Queue family struct
