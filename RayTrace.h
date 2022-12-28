@@ -1,3 +1,5 @@
+#pragma once
+
 #include <volk.h>
 #include "SDL.h"
 #include <optional>
@@ -22,11 +24,46 @@ public:
 		float lightIntensity;
 		int   lightType;
 	};
+
+	PushConstantRay pushConstantRay{};
+	// Information pushed at each draw call
+	struct PushConstantRaster
+	{
+		glm::mat4  modelMatrix;  // matrix of the instance
+		glm::vec3  lightPosition;
+		uint32_t  objIndex;
+		float lightIntensity;
+		int   lightType;
+		int   materialId;
+	};
+
+	PushConstantRaster pushConstantRaster{
+		{{1,0,0,0},{0,1,0,0},{0,0,1,0},{0,0,0,1}},                // Identity matrix
+		{10.f, 15.f, 8.f},  // light position
+		0,                  // instance Id
+		100.f,              // light intensity
+		0                   // light type
+	};
 	void createRtPipeline();
 	void createStorageImage();
 	VkImage storageImage;
 	VkDeviceMemory storageImageMemory;
 	VkImageView storageImageView;
+
+	template <typename MMSS>
+	
+	static inline MMSS line_ts_up(MMSS val, MMSS align) { return (val + align - 1) / align * align; };
+
+	void createRayTraceShaderBindingTable();
+
+	void traceRay(const VkCommandBuffer& cmdBuf, const glm::vec4& clearColor);
+
+	VkBuffer raySBTBuffer;
+	VkDeviceMemory raySBTBufferMemory;
+	VkStridedDeviceAddressRegionKHR genRegion{};
+	VkStridedDeviceAddressRegionKHR missRegion{};
+	VkStridedDeviceAddressRegionKHR hitRegion{};
+	VkStridedDeviceAddressRegionKHR callRegion{};
 
 	std::vector<VkRayTracingShaderGroupCreateInfoKHR> shaderGroups;
 	VkPipelineLayout pipelineLayout;
@@ -50,7 +87,6 @@ public:
 		VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
 		VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
 		"VK_KHR_buffer_device_address",
-		"VK_EXT_buffer_device_address",
 		"VK_EXT_descriptor_indexing",
 		"VK_EXT_host_query_reset"
 	};
@@ -67,7 +103,7 @@ public:
 	VkFormat SWChainImageFormat;
 	VkExtent2D SWChainExtent;
 	std::vector<VkImageView> SWChainImageViews;
-	void setImageLayout(VkCommandBuffer cmdBuffer, VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout);
+	void setImageLayout(VkCommandBuffer cmdBuffer, VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout, VkImageAspectFlags aspectFlags);
 
 	// Device and queue handles
 	VkPhysicalDevice GPU;
@@ -75,11 +111,16 @@ public:
 	VkQueue graphicsQueue;
 	VkQueue presentQueue;
 
+	void createObjDescBuffers();
+	std::vector<VkBuffer> ObjInstanceBuffers;
+	std::vector<VkDeviceMemory> ObjInstanceBuffersMemory;
+
 	// Color Blending
 	bool colorBlendEnable = true;
 
 	VkDescriptorSet descriptorSet;
 	VkDescriptorSetLayout descriptorSetLayout;
+	VkDescriptorSetLayout descriptorSetLayoutRaster;
 
 	// Pipeline Layout for "gloabls" to change shaders
 	VkPipelineLayout pipeLineLayout;
@@ -118,6 +159,18 @@ public:
 	std::vector<VkBuffer> uniformBuffers;
 	std::vector<VkDeviceMemory> uniformBuffersMemory;
 
+	VkBuffer materialBuffer;
+	VkDeviceMemory materialBufferMemory;
+
+	VkBuffer materialIndexBuffer;
+	VkDeviceMemory materialIndexBufferMemory;
+
+	void createMaterialIndexBuffer();
+
+	std::vector<std::string> textures;
+	void createMaterialBuffer();
+	std::vector<int> matIndx;
+
 	VkImage textureImage;
 	VkDeviceMemory textureImageMemory;
 	VkImageView textureImageView;
@@ -133,13 +186,18 @@ public:
 	std::vector<VkDescriptorSet> descriptorSets;
 
 	VkFence commandFence;
-	VkQueryPool queryPool;
 	VkBuffer tempBuffer;
 	VkDeviceMemory tempBufferMemory;
 	VkBuffer tempBuffer2;
 	VkDeviceMemory tempBufferMemory2;
 	VkBuffer tempBuffer3;
 	VkDeviceMemory tempBufferMemory3;
+
+	VkImage storageDepthImage;
+	VkDeviceMemory storageDepthImageMemory;
+	VkRenderPass storageRenderPass;
+	VkFramebuffer storageFrameBuffer;
+	VkImageView storageDepthImageView;
 
 	VkAccelerationStructureKHR topLevelAccelStructure;
 
@@ -149,10 +207,27 @@ public:
 		alignas(16) glm::mat4 proj;
 	};
 
+	struct WaveFrontMaterial  // See ObjLoader, copy of MaterialObj, could be compressed for device
+	{
+		glm::vec3  ambient;
+		glm::vec3  diffuse;
+		glm::vec3  specular;
+		glm::vec3  transmittance;
+		glm::vec3  emission;
+		float shininess;
+		float ior;       // index of refraction
+		float dissolve;  // 1 == opaque; 0 == fully transparent
+		int   illum;     // illumination model (see http://www.fileformat.info/format/material/)
+		int   textureId;
+	};
+
+	std::vector<WaveFrontMaterial> modMaterials;
+
 	struct Vertex {
 		glm::vec3 pos;
 		glm::vec3 color;
 		glm::vec2 texCoord;
+		glm::vec3 normal;
 
 		static VkVertexInputBindingDescription getBindingDescription() {
 			VkVertexInputBindingDescription bindingDescription{};
@@ -188,6 +263,16 @@ public:
 	};
 
 	std::vector<OBJInstance> instances;
+
+	struct OBJDesc {
+		uint32_t textureOffset = 0;
+		uint64_t vertexBufferAddress;
+		uint64_t indexBufferAddress;
+		uint64_t materialBufferAddress;
+		uint64_t materialIndexBufferAddress;
+	};
+
+	std::vector<OBJDesc> descriptions;
 
 	struct Model {
 		uint32_t totalIndices;
@@ -299,9 +384,9 @@ public:
 	};
 
 	struct BuildAccelerationStructure {
-		VkAccelerationStructureBuildGeometryInfoKHR buildInfo;
+		VkAccelerationStructureBuildGeometryInfoKHR buildInfo{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR };
 		const VkAccelerationStructureBuildRangeInfoKHR* rangeInfo;
-		VkAccelerationStructureBuildSizesInfoKHR sizeInfo;
+		VkAccelerationStructureBuildSizesInfoKHR sizeInfo{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR };
 		VkAccelerationStructureKHR accelStructure;
 
 		VkAccelerationStructureKHR prevStructure;
@@ -314,7 +399,7 @@ public:
 
 	std::vector<VkAccelerationStructureKHR> bottomLevelAccelerationStructures;
 	uint32_t numModels = 0;
-	std::vector<BuildAccelerationStructure> buildAS;
+	//std::vector<BuildAccelerationStructure> buildAS;
 
 	VkPhysicalDeviceRayTracingPipelinePropertiesKHR physicalDeviceRTProperties{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR };
 	void initializeRT();
@@ -322,12 +407,15 @@ public:
 	BLASInput BLASObjectToGeometry(Model model);
 	void createBottomLevelAS();
 	void buildBlas(const std::vector<BLASInput>& input, VkBuildAccelerationStructureFlagsKHR flags);
-	void CMDCreateBLAS(std::vector<uint32_t> indices, VkDeviceAddress scratchBufferAddress);
-	void CMDCompactBLAS(std::vector<uint32_t> indices);
+	VkCommandBuffer CMDCreateBLAS(VkCommandBuffer cmdbuff, std::vector<BuildAccelerationStructure>& buildAS, std::vector<uint32_t> indices, VkDeviceAddress scratchBufferAddress, VkQueryPool queryPool);
+	VkCommandBuffer CMDCompactBLAS(VkCommandBuffer cmdBuff, std::vector<BuildAccelerationStructure>& buildAS, std::vector<uint32_t> indices, VkQueryPool queryPool);
 	void createTopLevelAS();
 	void buildTlas(const std::vector<VkAccelerationStructureInstanceKHR>& instances, VkBuildAccelerationStructureFlagsKHR flags, bool update);
 	void CMDCreateTLAS(uint32_t numInstances, VkDeviceAddress instBufferAddress, VkBuffer scratchBuffer, VkBuildAccelerationStructureFlagsKHR flags, bool update, bool motion);
 	void createRTDescriptorSet();
+
+	VkAccelerationStructureDeviceAddressInfoKHR BLASAddressInfo;
+	VkAccelerationStructureDeviceAddressInfoKHR getBLASAddressInfo(RayTrace::OBJInstance inst);
 
 
 	// Queue family struct

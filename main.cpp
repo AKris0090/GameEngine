@@ -8,6 +8,7 @@
 #include "RayTrace.h"
 
 VulkanRenderer vkR;
+RayTrace rt;
 SDL_Window* displayWindow;
 bool yesTexture = true;
 const int MAX_FRAMES_IN_FLIGHT = 2;
@@ -82,6 +83,69 @@ void cleanup() {
     vkDestroyInstance(vkR.instance, nullptr);
 }
 
+void cleanupRT() {
+    rt.cleanupSWChain();
+
+    //for (auto& as : rt.buildAS) {
+    //    as.cleanupAS(rt.device);
+    //}
+
+    vkDestroyCommandPool(rt.device, rt.commandPool, nullptr);
+
+    vkDestroyImageView(rt.device, rt.depthImageView, nullptr);
+    vkDestroyImage(rt.device, rt.depthImage, nullptr);
+    vkFreeMemory(rt.device, rt.depthImageMemory, nullptr);
+
+    vkDestroySampler(rt.device, rt.textureSampler, nullptr);
+    vkDestroyImageView(rt.device, rt.textureImageView, nullptr);
+
+    vkDestroyImage(rt.device, rt.textureImage, nullptr);
+    vkFreeMemory(rt.device, rt.textureImageMemory, nullptr);
+
+    vkDestroyDescriptorSetLayout(rt.device, rt.descriptorSetLayout, nullptr);
+
+    vkDestroyBuffer(rt.device, rt.indexBuffer, nullptr);
+    vkFreeMemory(rt.device, rt.indexBufferMemory, nullptr);
+
+    vkDestroyBuffer(rt.device, rt.vertexBuffer, nullptr);
+    vkFreeMemory(rt.device, rt.vertexBufferMemory, nullptr);
+
+    for (size_t i = 0; i < vkR.SWChainImages.size(); i++) {
+        vkDestroyBuffer(rt.device, rt.uniformBuffers[i], nullptr);
+        vkFreeMemory(rt.device, rt.uniformBuffersMemory[i], nullptr);
+    }
+
+    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        vkDestroySemaphore(rt.device, rt.imageAcquiredSema[i], nullptr);
+        vkDestroySemaphore(rt.device, rt.renderedSema[i], nullptr);
+        vkDestroyFence(rt.device, rt.inFlightFences[i], nullptr);
+    }
+
+    for (auto frameBuffer : rt.SWChainFrameBuffers) {
+        vkDestroyFramebuffer(rt.device, frameBuffer, nullptr);
+    }
+
+    vkDestroyPipeline(rt.device, rt.rayTracingPipeline, nullptr);
+    vkDestroyPipelineLayout(rt.device, rt.pipeLineLayout, nullptr);
+
+    vkDestroyPipelineLayout(rt.device, rt.pipeLineLayout, nullptr);
+    vkDestroyRenderPass(rt.device, rt.renderPass, nullptr);
+
+    for (auto imageView : rt.SWChainImageViews) {
+        vkDestroyImageView(rt.device, imageView, nullptr);
+    }
+
+    vkDestroySwapchainKHR(rt.device, rt.swapChain, nullptr);
+    vkDestroyDevice(rt.device, nullptr);
+
+    if (rt.enableValLayers) {
+        rt.DestroyDebugUtilsMessengerEXT(rt.instance, rt.debugMessenger, nullptr);
+    }
+
+    vkDestroySurfaceKHR(rt.instance, rt.surface, nullptr);
+    vkDestroyInstance(rt.instance, nullptr);
+}
+
 void executeVulkanSDLLoop(Display d) {
     bool running = true;
     while (running) {
@@ -97,6 +161,30 @@ void executeVulkanSDLLoop(Display d) {
         }
         // Method to draw the frame
         d.drawNewFrame(vkR, MAX_FRAMES_IN_FLIGHT, vkR.inFlightFences, vkR.imagesInFlight);
+    }
+    // Cleanup after looping before exiting program
+    cleanup();
+    cleanupRT();
+    SDL_DestroyWindow(displayWindow);
+  
+    SDL_Quit();
+}
+
+void executeRayTrace(Display d) {
+    bool running = true;
+    while (running) {
+        SDL_Event event;
+        while (SDL_PollEvent(&event)) {
+            switch (event.type) {
+            case SDL_QUIT:
+                running = false;
+                break;
+            default:
+                break;
+            }
+        }
+        // Method to draw the frame
+        d.drawNewFrameRT(rt, MAX_FRAMES_IN_FLIGHT, rt.inFlightFences, rt.imagesInFlight);
     }
     // Cleanup after looping before exiting program
     cleanup();
@@ -168,11 +256,8 @@ void initVulkan() {
 }
 
 void initRayTrace() {
-    RayTrace rt;
 
     glm::mat4 translationMatrix{ 1.0f };
-
-    RayTrace::PushConstantRay m_pcRay{};
 
     volkInitialize();
 
@@ -192,55 +277,52 @@ void initRayTrace() {
 
     volkLoadDevice(rt.device);
 
+    rt.initializeRT();
+
     rt.createCommandPool();
 
     rt.createSWChain(displayWindow);
+    rt.createImageViews();
+    rt.createDepthResources();
+    rt.createRenderPass();
+    rt.createFrameBuffer();
 
     rt.loadModel(translationMatrix);
 
-    rt.createVertexBuffer();
-
-    rt.createIndexBuffer();
-
-    rt.createUniformBuffers();
-
-    rt.createBottomLevelAS();
-    
-    rt.createTopLevelAS();
-
-    rt.createImageViews();
-
     rt.createStorageImage();
 
+    rt.createVertexBuffer();
+    rt.createIndexBuffer();
+    rt.createMaterialBuffer();
+    rt.createMaterialIndexBuffer();
+    rt.createUniformBuffers();
+    rt.createObjDescBuffers();
+
+    rt.createBottomLevelAS();
+    rt.createTopLevelAS();
+
     rt.createTextureImage();
-
     rt.createTextureImageView();
-
     rt.createTextureImageSampler();
 
-    rt.createRenderPass();
-
     rt.createDescriptorPool();
-
     rt.createDescriptorSetLayout();
-
     rt.createRTDescriptorSet();
 
     rt.createRtPipeline();
+    rt.createRayTraceShaderBindingTable();
 
-    rt.createDepthResources();
-
-    rt.createFrameBuffer();
-
-    rt.createTextureImage();
-
-    rt.createTextureImageView();
-
-    rt.createTextureImageSampler();
-
-    rt.createCommandBuffers();
+    //rt.createCommandBuffers();
 
     rt.createSemaphores(MAX_FRAMES_IN_FLIGHT);
+
+    glm::vec4 clearColor = glm::vec4(1, 1, 1, 1.00f);
+
+    VkCommandBuffer cmdbuff = rt.beginSingleTimeCommands();
+
+    rt.traceRay(cmdbuff, clearColor);
+
+    rt.endSingleTimeCommands(cmdbuff);
 }
 
 int main(int argc, char** arcgv) {
@@ -248,9 +330,11 @@ int main(int argc, char** arcgv) {
     Display d;
     displayWindow = d.initDisplay("Vulkan Game Engine");
 
+    //initVulkan();
     initRayTrace();
 
-    executeVulkanSDLLoop(d);
+    //executeVulkanSDLLoop(d);
+    executeRayTrace(d);
 
     return 0;
 }
